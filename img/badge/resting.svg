@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="98" height="26" viewBox="0 0 98 26" role="img" aria-label="休息一下">
+  <rect x="1" y="1" width="96" height="24" rx="12" fill="#eef6ff" stroke="#dbe3ee" stroke-width="1"/>
+  <circle cx="16" cy="13" r="4" fill="#60a5fa"/>
+  <text x="26" y="17.5" font-family="Arial, Helvetica, sans-serif" font-size="12.5" fill="#2b5aa8">休息一下</text>
+</svg>

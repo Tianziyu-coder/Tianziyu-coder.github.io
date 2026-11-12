@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="85" height="24" viewBox="0 0 85 24" role="img" aria-label="Java 17">
+  <defs><clipPath id="r"><rect width="85" height="24" rx="5"/></clipPath></defs>
+  <g clip-path="url(#r)">
+    <rect width="50" height="24" fill="#4b5563"/>
+    <rect x="50" width="35" height="24" fill="#0ea5e9"/>
+  </g>
+  <text x="10" y="16" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#ffffff">Java</text>
+  <text x="60" y="16" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#ffffff">17</text>
+</svg>

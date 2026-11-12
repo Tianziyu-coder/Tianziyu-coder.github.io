@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="111" height="26" viewBox="0 0 111 26" role="img" aria-label="正在写笔记">
+  <rect x="1" y="1" width="109" height="24" rx="12" fill="#fff8ec" stroke="#dbe3ee" stroke-width="1"/>
+  <circle cx="16" cy="13" r="4" fill="#f59e0b"/>
+  <text x="26" y="17.5" font-family="Arial, Helvetica, sans-serif" font-size="12.5" fill="#8a5a10">正在写笔记</text>
+</svg>

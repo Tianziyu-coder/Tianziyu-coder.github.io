@@ -23,7 +23,17 @@
     els.forEach(function (el) { io.observe(el); });
   }
 
+  /* 页面里的 <b class="js-stat" data-stat="posts"> 占位符也填上真实数字 */
+  function fillInlineStats() {
+    var s = window.__SITE_STATS__ || {};
+    document.querySelectorAll('b[data-stat]').forEach(function (el) {
+      var k = el.getAttribute('data-stat');
+      if (s[k] != null) el.textContent = s[k];
+    });
+  }
+
   function build() {
+    fillInlineStats();
     var aside = document.getElementById('aside-content');
     if (!aside) return;
     var old = document.querySelector('.tech-stats');

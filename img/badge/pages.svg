@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="173" height="24" viewBox="0 0 173 24" role="img" aria-label="Hosted GitHub Pages">
+  <defs><clipPath id="r"><rect width="173" height="24" rx="5"/></clipPath></defs>
+  <g clip-path="url(#r)">
+    <rect width="64" height="24" fill="#4b5563"/>
+    <rect x="64" width="109" height="24" fill="#1f883d"/>
+  </g>
+  <text x="10" y="16" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#ffffff">Hosted</text>
+  <text x="74" y="16" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#ffffff">GitHub Pages</text>
+</svg>

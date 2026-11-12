@@ -1,0 +1,276 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  
+  <url>
+    <loc>https://tianziyu-coder.github.io/projects/index.html</loc>
+    
+    <lastmod>2026-11-12</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://tianziyu-coder.github.io/about/index.html</loc>
+    
+    <lastmod>2026-11-12</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://tianziyu-coder.github.io/notes/index.html</loc>
+    
+    <lastmod>2026-11-12</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://tianziyu-coder.github.io/2025/11/08/springboot-autoconfigure-notes/</loc>
+    
+    <lastmod>2026-11-12</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://tianziyu-coder.github.io/2025/09/20/jvm-classloader-notes/</loc>
+    
+    <lastmod>2026-11-12</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://tianziyu-coder.github.io/2025/08/16/java-threadlocal-notes/</loc>
+    
+    <lastmod>2026-11-12</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://tianziyu-coder.github.io/2025/06/28/java-jmm-volatile-synchronized/</loc>
+    
+    <lastmod>2026-11-12</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://tianziyu-coder.github.io/2025/05/31/java-generics-reflection-notes/</loc>
+    
+    <lastmod>2026-11-12</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://tianziyu-coder.github.io/2025/04/26/java-stream-optional-notes/</loc>
+    
+    <lastmod>2026-11-12</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://tianziyu-coder.github.io/2025/03/22/java-exception-best-practices/</loc>
+    
+    <lastmod>2026-11-12</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://tianziyu-coder.github.io/2025/02/18/java-string-pool-notes/</loc>
+    
+    <lastmod>2026-11-12</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://tianziyu-coder.github.io/link/index.html</loc>
+    
+    <lastmod>2026-11-11</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://tianziyu-coder.github.io/2026/09/20/java-interview-quick-reference/</loc>
+    
+    <lastmod>2026-10-20</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://tianziyu-coder.github.io/2026/08/22/gateway-jwt-auth-notes/</loc>
+    
+    <lastmod>2026-10-20</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://tianziyu-coder.github.io/2026/10/05/docker-deploy-notes/</loc>
+    
+    <lastmod>2026-10-20</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://tianziyu-coder.github.io/2026/09/05/nacos-registry-config-notes/</loc>
+    
+    <lastmod>2026-10-20</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://tianziyu-coder.github.io/2026/08/08/note-module-design-notes/</loc>
+    
+    <lastmod>2026-10-20</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://tianziyu-coder.github.io/2026/07/18/mq-reliability-notes/</loc>
+    
+    <lastmod>2026-10-20</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://tianziyu-coder.github.io/2026/07/04/spring-ioc-aop-notes/</loc>
+    
+    <lastmod>2026-10-20</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://tianziyu-coder.github.io/2026/06/20/spring-cloud-openfeign-notes/</loc>
+    
+    <lastmod>2026-10-20</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://tianziyu-coder.github.io/2026/06/06/spring-transaction-notes/</loc>
+    
+    <lastmod>2026-10-20</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://tianziyu-coder.github.io/2026/05/23/redis-cache-problems-notes/</loc>
+    
+    <lastmod>2026-10-20</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://tianziyu-coder.github.io/2026/05/09/mysql-index-notes/</loc>
+    
+    <lastmod>2026-10-20</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://tianziyu-coder.github.io/2026/04/25/concurrenthashmap-notes/</loc>
+    
+    <lastmod>2026-10-20</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://tianziyu-coder.github.io/2026/04/11/jvm-memory-gc-notes/</loc>
+    
+    <lastmod>2026-10-20</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://tianziyu-coder.github.io/2026/03/28/java-threadpool-notes/</loc>
+    
+    <lastmod>2026-10-20</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://tianziyu-coder.github.io/2026/03/15/java-hashmap-notes/</loc>
+    
+    <lastmod>2026-10-20</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://tianziyu-coder.github.io/categories/index.html</loc>
+    
+    <lastmod>2026-10-20</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://tianziyu-coder.github.io/tags/index.html</loc>
+    
+    <lastmod>2026-10-20</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+
+  <url>
+    <loc>https://tianziyu-coder.github.io/</loc>
+    <lastmod>2026-11-12</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+
+  
+
+  
+</urlset>
