@@ -233,6 +233,130 @@ Objects.requireNonNull &#x2F; IllegalArgumentException 做参数校验，比留�
       </tags>
   </entry>
   <entry>
+    <title>泛型擦除、反射与运行时注解：从编译期到运行期</title>
+    <url>/2025/05/31/java-generics-reflection-notes/</url>
+    <content><![CDATA[一句话总结Java 泛型是编译期特性：编译后类型参数被擦除到边界，运行时 List&lt;String&gt; 和 List&lt;Integer&gt; 是同一个类；但声明在类&#x2F;字段&#x2F;方法签名上的泛型信息会写进 Signature 属性，可以用反射读回来。
+
+
+一、擦除规则与桥方法// 源码class Box&lt;T extends Number &amp; Comparable&lt;T&gt;&gt; &#123;    private T value;    public T get() &#123; return value; &#125;&#125;// 擦除后（概念上）class Box &#123;    private Number value;    public Number get() &#123; return value; &#125;&#125;
+
+规则：无界 T 擦成 Object；有界擦成第一个边界（多个边界时后面的靠插入强转实现）；编译器在必要处自动加强转，并生成桥方法保持多态不被破坏。
+interface Box&lt;T&gt; &#123; void set(T v); &#125;class StringBox implements Box&lt;String&gt; &#123;    @Override public void set(String v) &#123; /* ... */ &#125;    // 编译器额外生成（字节码里真实存在）：    // public void set(Object v) &#123; set((String) v); &#125;&#125;
+
+如果没这个桥方法，通过 Box 接口调用 set 会找不到实现——这就是擦除与多态冲突的修补方式，也是反射时看到”两个 set 方法”的原因（用 isBridge() 过滤）。
+擦除带来的限制（面试高频）：
+
+
+
+写法
+是否合法
+原因
+
+
+
+new T()
+否
+运行时没有 T 的具体类型
+
+
+new T[10]
+否
+数组需要确切组件类型
+
+
+if (obj instanceof List&lt;String&gt;)
+否
+运行时无法区分参数化类型
+
+
+List&lt;int&gt;
+否
+类型参数必须是引用类型，用 List&lt;Integer&gt;
+
+
+重载 f(List&lt;String&gt;) &#x2F; f(List&lt;Integer&gt;)
+否
+擦除后签名相同
+
+
+List&lt;String&gt; ls = new ArrayList&lt;Object&gt;()
+否
+泛型不协变，要用通配符
+
+
+二、PECS 与通配符Producer Extends, Consumer Super：只往外读用 ? extends，只往里写用 ? super，两者都做就别用通配符。
+// 读取：接受 List&lt;Integer&gt;、List&lt;Double&gt; 等任意 Number 子类的列表public static double sum(List&lt;? extends Number&gt; list) &#123;    double total = 0;    for (Number n : list) total += n.doubleValue();    return total;    // list.add(1);  // 编译错误：不知道实际是 List&lt;Double&gt; 还是别的&#125;// 写入：可以安全地放 Integer 及其子类public static void fill(List&lt;? super Integer&gt; list) &#123;    list.add(1);    Object o = list.get(0);   // 读出来只能是 Object&#125;
+
+List&lt;?&gt; 和 List&lt;Object&gt; 不一样：前者是”某种未知类型”，只能读成 Object、不能 add（除 null）；后者明确是 Object，什么都能放。
+三、反射能拿回泛型信息吗能，但只有声明处的签名（类、字段、方法返回值&#x2F;参数上的泛型），拿不到 new ArrayList&lt;String&gt;() 这个局部变量的实际参数类型——因为它没被写进 class 文件。
+Method m = Mapper.class.getMethod(&quot;findUsers&quot;);Type rt = m.getGenericReturnType();          // 注意不是 getReturnType()if (rt instanceof ParameterizedType pt) &#123;    Type arg = pt.getActualTypeArguments()[0];  // User    System.out.println(arg.getTypeName());&#125;// 泛型类型令牌：Gson / MyBatis 常用这个套路绕过擦除new TypeToken&lt;List&lt;User&gt;&gt;() &#123;&#125;.getType();
+
+原理：匿名内部类把 List&lt;User&gt; 写进了自己的父类签名，getGenericSuperclass() 因此能读到。这也是 TypeReference、TypeToken 必须写成匿名子类的原因。
+反射实战要点：
+Class&lt;?&gt; c = Class.forName(&quot;com.example.Order&quot;);  // 会触发类初始化Field f = c.getDeclaredField(&quot;id&quot;);f.setAccessible(true);                            // 访问私有成员Object v = f.get(instance);
+
+
+getDeclaredXxx 只取本类声明的（含 private），getXxx 取所有 public（含继承）；
+反射调用有访问检查和方法查找开销，热路径上应缓存 Method/Field，或改用 MethodHandle &#x2F; 编译期生成代码；
+JDK 9 模块化之后，反射访问非公开成员可能抛 InaccessibleObjectException，需要模块 opens 或启动参数 --add-opens。
+
+四、注解与自定义运行时注解四个元注解：@Retention（生命周期）、@Target（能标在哪）、@Documented、@Inherited；JDK 8 又加了 @Repeatable。
+
+
+
+RetentionPolicy
+保留到
+典型用途
+
+
+
+SOURCE
+源码
+@Override、@SuppressWarnings、Lombok
+
+
+CLASS
+class 文件（默认）
+字节码增强、编译期工具
+
+
+RUNTIME
+运行时，可反射读取
+Spring、MyBatis、自定义切面
+
+
+@Retention(RetentionPolicy.RUNTIME)@Target(ElementType.METHOD)public @interface Idempotent &#123;    String key() default &quot;&quot;;      // 注解元素只能是基本类型/String/Class/枚举/注解/数组    int expireSeconds() default 60;&#125;
+
+在 Spring 项目里落地（拦截器或 AOP 二选一）：
+@Aspect@Componentpublic class IdempotentAspect &#123;    @Around(&quot;@annotation(idem)&quot;)    public Object around(ProceedingJoinPoint pjp, Idempotent idem) throws Throwable &#123;        String key = buildKey(pjp, idem.key());        Boolean ok = redisTemplate.opsForValue()                .setIfAbsent(key, &quot;1&quot;, idem.expireSeconds(), TimeUnit.SECONDS);        if (!Boolean.TRUE.equals(ok)) throw new BizException(&quot;请勿重复提交&quot;);        try &#123;            return pjp.proceed();        &#125; finally &#123;            // 业务失败时释放，允许重试；是否删除取决于业务语义        &#125;    &#125;&#125;
+
+注解本身只是元数据，不会有任何行为；行为来自读它的框架。这一点面试时常被问倒。
+五、面试怎么答
+泛型擦除是什么？ → 编译期把类型参数替换成边界并插入强转，运行时不保留参数化类型，目的是兼容 JDK 5 之前的字节码。
+为什么 List&lt;String&gt; 不能赋给 List&lt;Object&gt;？ → 泛型不协变；否则可以通过 List&lt;Object&gt; 往里塞 Integer 破坏类型安全。数组是协变的，但会在运行时用 ArrayStoreException 兜底，两者设计不同。
+反射能不能拿到泛型？ → 声明签名可以（getGenericReturnType &#x2F; getGenericSuperclass），局部变量不行。
+注解为什么能被 Spring 识别？ → @Retention(RUNTIME) 让注解在运行时可见，框架通过反射&#x2F;AOP 读取并执行逻辑。
+
+六、踩坑清单
+Arrays.asList(arr) 返回的是固定长度的内部 ArrayList，add/remove 会抛 UnsupportedOperationException；List.of(...) 完全不可变；
+Collections.emptyList() 也是不可变的，别往里 add；
+基本类型数组传给 Arrays.asList 会得到 List&lt;int[]&gt; 而不是 List&lt;Integer&gt;；
+反射 setAccessible(true) 在 JDK 17 下反射 JDK 内部类会失败，先考虑有没有公开 API；
+自定义注解别忘 @Retention(RUNTIME)，否则运行时读不到，切面完全不生效；
+Optional、List&lt;T&gt; 这类泛型别当方法参数传 null，返回空集合&#x2F;空 Optional 比 null 好处理。
+
+]]></content>
+      <categories>
+        <category>Java基础</category>
+      </categories>
+      <tags>
+        <tag>Java</tag>
+        <tag>泛型</tag>
+        <tag>反射</tag>
+        <tag>注解</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>Java 集合：HashMap 底层结构与扩容机制</title>
     <url>/2026/03/15/java-hashmap-notes/</url>
     <content><![CDATA[一句话总结JDK 8 的 HashMap &#x3D; 数组 + 链表 + 红黑树。默认容量 16，负载因子 0.75，扩容时容量翻倍。
@@ -444,262 +568,6 @@ SET key value NX PX 30000 + Lua 校验 value 删除
       </tags>
   </entry>
   <entry>
-    <title>泛型擦除、反射与运行时注解：从编译期到运行期</title>
-    <url>/2025/05/31/java-generics-reflection-notes/</url>
-    <content><![CDATA[一句话总结Java 泛型是编译期特性：编译后类型参数被擦除到边界，运行时 List&lt;String&gt; 和 List&lt;Integer&gt; 是同一个类；但声明在类&#x2F;字段&#x2F;方法签名上的泛型信息会写进 Signature 属性，可以用反射读回来。
-
-
-一、擦除规则与桥方法// 源码class Box&lt;T extends Number &amp; Comparable&lt;T&gt;&gt; &#123;    private T value;    public T get() &#123; return value; &#125;&#125;// 擦除后（概念上）class Box &#123;    private Number value;    public Number get() &#123; return value; &#125;&#125;
-
-规则：无界 T 擦成 Object；有界擦成第一个边界（多个边界时后面的靠插入强转实现）；编译器在必要处自动加强转，并生成桥方法保持多态不被破坏。
-interface Box&lt;T&gt; &#123; void set(T v); &#125;class StringBox implements Box&lt;String&gt; &#123;    @Override public void set(String v) &#123; /* ... */ &#125;    // 编译器额外生成（字节码里真实存在）：    // public void set(Object v) &#123; set((String) v); &#125;&#125;
-
-如果没这个桥方法，通过 Box 接口调用 set 会找不到实现——这就是擦除与多态冲突的修补方式，也是反射时看到”两个 set 方法”的原因（用 isBridge() 过滤）。
-擦除带来的限制（面试高频）：
-
-
-
-写法
-是否合法
-原因
-
-
-
-new T()
-否
-运行时没有 T 的具体类型
-
-
-new T[10]
-否
-数组需要确切组件类型
-
-
-if (obj instanceof List&lt;String&gt;)
-否
-运行时无法区分参数化类型
-
-
-List&lt;int&gt;
-否
-类型参数必须是引用类型，用 List&lt;Integer&gt;
-
-
-重载 f(List&lt;String&gt;) &#x2F; f(List&lt;Integer&gt;)
-否
-擦除后签名相同
-
-
-List&lt;String&gt; ls = new ArrayList&lt;Object&gt;()
-否
-泛型不协变，要用通配符
-
-
-二、PECS 与通配符Producer Extends, Consumer Super：只往外读用 ? extends，只往里写用 ? super，两者都做就别用通配符。
-// 读取：接受 List&lt;Integer&gt;、List&lt;Double&gt; 等任意 Number 子类的列表public static double sum(List&lt;? extends Number&gt; list) &#123;    double total = 0;    for (Number n : list) total += n.doubleValue();    return total;    // list.add(1);  // 编译错误：不知道实际是 List&lt;Double&gt; 还是别的&#125;// 写入：可以安全地放 Integer 及其子类public static void fill(List&lt;? super Integer&gt; list) &#123;    list.add(1);    Object o = list.get(0);   // 读出来只能是 Object&#125;
-
-List&lt;?&gt; 和 List&lt;Object&gt; 不一样：前者是”某种未知类型”，只能读成 Object、不能 add（除 null）；后者明确是 Object，什么都能放。
-三、反射能拿回泛型信息吗能，但只有声明处的签名（类、字段、方法返回值&#x2F;参数上的泛型），拿不到 new ArrayList&lt;String&gt;() 这个局部变量的实际参数类型——因为它没被写进 class 文件。
-Method m = Mapper.class.getMethod(&quot;findUsers&quot;);Type rt = m.getGenericReturnType();          // 注意不是 getReturnType()if (rt instanceof ParameterizedType pt) &#123;    Type arg = pt.getActualTypeArguments()[0];  // User    System.out.println(arg.getTypeName());&#125;// 泛型类型令牌：Gson / MyBatis 常用这个套路绕过擦除new TypeToken&lt;List&lt;User&gt;&gt;() &#123;&#125;.getType();
-
-原理：匿名内部类把 List&lt;User&gt; 写进了自己的父类签名，getGenericSuperclass() 因此能读到。这也是 TypeReference、TypeToken 必须写成匿名子类的原因。
-反射实战要点：
-Class&lt;?&gt; c = Class.forName(&quot;com.example.Order&quot;);  // 会触发类初始化Field f = c.getDeclaredField(&quot;id&quot;);f.setAccessible(true);                            // 访问私有成员Object v = f.get(instance);
-
-
-getDeclaredXxx 只取本类声明的（含 private），getXxx 取所有 public（含继承）；
-反射调用有访问检查和方法查找开销，热路径上应缓存 Method/Field，或改用 MethodHandle &#x2F; 编译期生成代码；
-JDK 9 模块化之后，反射访问非公开成员可能抛 InaccessibleObjectException，需要模块 opens 或启动参数 --add-opens。
-
-四、注解与自定义运行时注解四个元注解：@Retention（生命周期）、@Target（能标在哪）、@Documented、@Inherited；JDK 8 又加了 @Repeatable。
-
-
-
-RetentionPolicy
-保留到
-典型用途
-
-
-
-SOURCE
-源码
-@Override、@SuppressWarnings、Lombok
-
-
-CLASS
-class 文件（默认）
-字节码增强、编译期工具
-
-
-RUNTIME
-运行时，可反射读取
-Spring、MyBatis、自定义切面
-
-
-@Retention(RetentionPolicy.RUNTIME)@Target(ElementType.METHOD)public @interface Idempotent &#123;    String key() default &quot;&quot;;      // 注解元素只能是基本类型/String/Class/枚举/注解/数组    int expireSeconds() default 60;&#125;
-
-在 Spring 项目里落地（拦截器或 AOP 二选一）：
-@Aspect@Componentpublic class IdempotentAspect &#123;    @Around(&quot;@annotation(idem)&quot;)    public Object around(ProceedingJoinPoint pjp, Idempotent idem) throws Throwable &#123;        String key = buildKey(pjp, idem.key());        Boolean ok = redisTemplate.opsForValue()                .setIfAbsent(key, &quot;1&quot;, idem.expireSeconds(), TimeUnit.SECONDS);        if (!Boolean.TRUE.equals(ok)) throw new BizException(&quot;请勿重复提交&quot;);        try &#123;            return pjp.proceed();        &#125; finally &#123;            // 业务失败时释放，允许重试；是否删除取决于业务语义        &#125;    &#125;&#125;
-
-注解本身只是元数据，不会有任何行为；行为来自读它的框架。这一点面试时常被问倒。
-五、面试怎么答
-泛型擦除是什么？ → 编译期把类型参数替换成边界并插入强转，运行时不保留参数化类型，目的是兼容 JDK 5 之前的字节码。
-为什么 List&lt;String&gt; 不能赋给 List&lt;Object&gt;？ → 泛型不协变；否则可以通过 List&lt;Object&gt; 往里塞 Integer 破坏类型安全。数组是协变的，但会在运行时用 ArrayStoreException 兜底，两者设计不同。
-反射能不能拿到泛型？ → 声明签名可以（getGenericReturnType &#x2F; getGenericSuperclass），局部变量不行。
-注解为什么能被 Spring 识别？ → @Retention(RUNTIME) 让注解在运行时可见，框架通过反射&#x2F;AOP 读取并执行逻辑。
-
-六、踩坑清单
-Arrays.asList(arr) 返回的是固定长度的内部 ArrayList，add/remove 会抛 UnsupportedOperationException；List.of(...) 完全不可变；
-Collections.emptyList() 也是不可变的，别往里 add；
-基本类型数组传给 Arrays.asList 会得到 List&lt;int[]&gt; 而不是 List&lt;Integer&gt;；
-反射 setAccessible(true) 在 JDK 17 下反射 JDK 内部类会失败，先考虑有没有公开 API；
-自定义注解别忘 @Retention(RUNTIME)，否则运行时读不到，切面完全不生效；
-Optional、List&lt;T&gt; 这类泛型别当方法参数传 null，返回空集合&#x2F;空 Optional 比 null 好处理。
-
-]]></content>
-      <categories>
-        <category>Java基础</category>
-      </categories>
-      <tags>
-        <tag>Java</tag>
-        <tag>泛型</tag>
-        <tag>反射</tag>
-        <tag>注解</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>Stream 与 Optional 实战：好用，但别用错</title>
-    <url>/2025/04/26/java-stream-optional-notes/</url>
-    <content><![CDATA[一句话总结Stream 是不存数据、一次性消费、惰性求值的计算管道；Optional 是给方法返回值表达”可能没有”的容器，不是用来替代所有 null 判断的。两者用对了代码更短，用错了更容易踩坑。
-
-
-一、Stream 的三条基本性质List&lt;String&gt; names = users.stream()        .filter(u -&gt; u.getAge() &gt;= 18)   // 中间操作：只记录，不执行        .map(User::getName)        .distinct()        .sorted()        .collect(Collectors.toList());   // 终端操作：真正触发遍历
-
-
-不存储数据：只持有数据源的引用，结果要靠 collect 收出来；
-惰性：中间操作在终端操作之前不会执行，所以 stream().filter(...) 单独写一行等于什么都没做；
-一次性：终端操作后流已关闭，再次遍历抛 IllegalStateException: stream has already been operated upon or closed。
-
-
-
-
-类型
-常见方法
-
-
-
-中间（返回 Stream）
-filter map flatMap distinct sorted peek limit skip
-
-
-终端（返回结果）
-collect forEach toList count reduce anyMatch allMatch findFirst findAny
-
-
-peek 只在调试时用（且必须接终端操作才会执行），别用它做业务赋值。
-二、Collectors.toMap 的三个坑// 危险写法：key 重复直接抛 IllegalStateException；value 为 null 抛 NPE；顺序不保证Map&lt;Long, String&gt; m = users.stream()        .collect(Collectors.toMap(User::getId, User::getName));// 稳妥写法Map&lt;Long, String&gt; m = users.stream()        .collect(Collectors.toMap(                User::getId,                u -&gt; Optional.ofNullable(u.getName()).orElse(&quot;&quot;),                (oldVal, newVal) -&gt; oldVal,   // 重复 key：保留先出现的                LinkedHashMap::new            // 需要保序时指定容器        ));
-
-
-
-
-坑
-表现
-处理
-
-
-
-重复 key
-IllegalStateException: Duplicate key
-传第三个参数 merge function
-
-
-value 为 null
-NullPointerException
-提前兜底，或改用 HashMap 手动 put
-
-
-顺序
-默认 HashMap 无序
-传第四个参数 LinkedHashMap::new
-
-
-分组也很常用：
-Map&lt;String, List&lt;Order&gt;&gt; byStatus = orders.stream()        .collect(Collectors.groupingBy(Order::getStatus));Map&lt;Boolean, List&lt;Order&gt;&gt; paid = orders.stream()        .collect(Collectors.partitioningBy(o -&gt; o.getStatus() == PAID));
-
-三、parallelStream 不是”加个 parallel 就变快”// 反例：共享可变状态，并发写入 ArrayList 会丢数据甚至抛异常List&lt;Integer&gt; result = new ArrayList&lt;&gt;();IntStream.range(0, 10000).parallel().forEach(result::add);// 正解：用 collect 归约，让框架处理分区与合并List&lt;Integer&gt; result = IntStream.range(0, 10000).parallel()        .boxed().collect(Collectors.toList());
-
-适用判断：
-
-数据源可拆分（ArrayList、IntStream.range 好，LinkedList、IO 流差）；
-任务量大且单个元素处理偏 CPU 密集，小集合的拆分支配&#x2F;合并开销反而更慢；
-无共享可变状态、无顺序依赖、无 IO&#x2F;数据库调用（并行会打满公共 ForkJoinPool，把别的服务拖慢）；
-需要有序结果时别用 forEach（forEachOrdered 会抵消大部分并行收益）。
-
-线上服务里更该谨慎：Web 请求本身已经并发，再套 parallelStream 抢的是同一个公共池。
-四、Optional 的正确用法// 推荐：作为返回值，链式表达&quot;可能没有&quot;public Optional&lt;User&gt; findByEmail(String email) &#123; ... &#125;String displayName = userService.findByEmail(email)        .map(User::getNickname)        .filter(s -&gt; !s.isBlank())        .orElseGet(() -&gt; &quot;用户&quot; + email.substring(0, 3));
-
-orElse 与 orElseGet 的区别是高频题：
-Optional&lt;User&gt; opt = Optional.of(user);opt.orElse(loadFromDb());       // loadFromDb() 一定执行，哪怕 opt 有值opt.orElseGet(() -&gt; loadFromDb()); // 只有为空时才执行
-
-orElse 的参数是先求值再传进去的，如果里面是远程调用&#x2F;查库，代价很实在。
-
-
-
-不要用
-原因
-
-
-
-Optional.get() 不先判断
-空值时抛 NoSuchElementException，等于换了个 NPE
-
-
-字段&#x2F;参数声明成 Optional
-设计意图是返回值；字段用它会让序列化、JPA 映射变得麻烦
-
-
-Optional.of(null)
-直接 NPE，应为 ofNullable
-
-
-if (opt != null)
-Optional 本身不该为 null，返回空用 Optional.empty()
-
-
-Optional 里套 Optional
-用 flatMap 拍平
-
-
-五、性能与可读性Stream 有 lambda、装箱、函数对象等开销，几十个元素的简单循环里手写 for 通常更快，但差距在微基准之外基本可以忽略。取舍标准是可读性：多步过滤&#x2F;映射&#x2F;分组用 Stream 明显更清晰；带 break、多重下标、需要修改外部状态的逻辑用循环更直接。
-两个容易忽略的点：
-// 无限流必须配 limit，否则终端操作不会结束Stream.iterate(0, i -&gt; i + 1).limit(10).forEach(System.out::println);// 流中修改源集合会触发 ConcurrentModificationException（或结果不确定）users.stream().filter(...).forEach(u -&gt; users.remove(u));  // 禁止
-
-六、面试怎么答
-什么是惰性求值？ → 中间操作只构建管道，终端操作才触发遍历；好处是可以做短路（findFirst、anyMatch）和循环融合，避免多次遍历。
-findFirst 和 findAny 区别？ → 前者保证按 encounter order 返回第一个，后者在并行流里可返回任意一个以换取性能；串行流下通常结果一样，但不要依赖。
-reduce 与 collect 区别？ → reduce 把元素归约成一个不可变结果（如求和），collect 用可变容器累加，适合收集成集合&#x2F;Map。
-orElse 和 orElseGet？ → 前者参数无论是否为空都会求值，后者惰性。
-
-七、踩坑清单
-Stream 别存成字段反复用，用完即弃；
-Collectors.toMap 一律显式处理重复 key；
-parallelStream 里别碰共享集合、别查数据库；
-map 返回 null 会让后续 collect 或 toMap 炸掉，先 filter(Objects::nonNull)；
-基本类型流用 IntStream &#x2F; LongStream 避免装箱，sum() 比 reduce(0, Integer::sum) 更直白；
-Optional 不要用在 DTO&#x2F;JSON 序列化上，Jackson 需要额外模块才能正确处理。
-
-]]></content>
-      <categories>
-        <category>Java基础</category>
-      </categories>
-      <tags>
-        <tag>Java</tag>
-        <tag>面试</tag>
-        <tag>Stream</tag>
-        <tag>Optional</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>JMM、volatile 与 synchronized：可见性、原子性、有序性</title>
     <url>/2025/06/28/java-jmm-volatile-synchronized/</url>
     <content><![CDATA[一句话总结并发三问题：可见性（缓存&#x2F;工作内存）、原子性（复合操作被打断）、有序性（指令重排序）。volatile 解决可见性与有序性但不保证原子性；synchronized 三个都解决，代价是互斥。
@@ -843,6 +711,227 @@ volatile 数组同理，只保证数组引用可见，元素读写要用 AtomicR
         <tag>并发</tag>
         <tag>面试</tag>
         <tag>JMM</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Stream 与 Optional 实战：好用，但别用错</title>
+    <url>/2025/04/26/java-stream-optional-notes/</url>
+    <content><![CDATA[一句话总结Stream 是不存数据、一次性消费、惰性求值的计算管道；Optional 是给方法返回值表达”可能没有”的容器，不是用来替代所有 null 判断的。两者用对了代码更短，用错了更容易踩坑。
+
+
+一、Stream 的三条基本性质List&lt;String&gt; names = users.stream()        .filter(u -&gt; u.getAge() &gt;= 18)   // 中间操作：只记录，不执行        .map(User::getName)        .distinct()        .sorted()        .collect(Collectors.toList());   // 终端操作：真正触发遍历
+
+
+不存储数据：只持有数据源的引用，结果要靠 collect 收出来；
+惰性：中间操作在终端操作之前不会执行，所以 stream().filter(...) 单独写一行等于什么都没做；
+一次性：终端操作后流已关闭，再次遍历抛 IllegalStateException: stream has already been operated upon or closed。
+
+
+
+
+类型
+常见方法
+
+
+
+中间（返回 Stream）
+filter map flatMap distinct sorted peek limit skip
+
+
+终端（返回结果）
+collect forEach toList count reduce anyMatch allMatch findFirst findAny
+
+
+peek 只在调试时用（且必须接终端操作才会执行），别用它做业务赋值。
+二、Collectors.toMap 的三个坑// 危险写法：key 重复直接抛 IllegalStateException；value 为 null 抛 NPE；顺序不保证Map&lt;Long, String&gt; m = users.stream()        .collect(Collectors.toMap(User::getId, User::getName));// 稳妥写法Map&lt;Long, String&gt; m = users.stream()        .collect(Collectors.toMap(                User::getId,                u -&gt; Optional.ofNullable(u.getName()).orElse(&quot;&quot;),                (oldVal, newVal) -&gt; oldVal,   // 重复 key：保留先出现的                LinkedHashMap::new            // 需要保序时指定容器        ));
+
+
+
+
+坑
+表现
+处理
+
+
+
+重复 key
+IllegalStateException: Duplicate key
+传第三个参数 merge function
+
+
+value 为 null
+NullPointerException
+提前兜底，或改用 HashMap 手动 put
+
+
+顺序
+默认 HashMap 无序
+传第四个参数 LinkedHashMap::new
+
+
+分组也很常用：
+Map&lt;String, List&lt;Order&gt;&gt; byStatus = orders.stream()        .collect(Collectors.groupingBy(Order::getStatus));Map&lt;Boolean, List&lt;Order&gt;&gt; paid = orders.stream()        .collect(Collectors.partitioningBy(o -&gt; o.getStatus() == PAID));
+
+三、parallelStream 不是”加个 parallel 就变快”// 反例：共享可变状态，并发写入 ArrayList 会丢数据甚至抛异常List&lt;Integer&gt; result = new ArrayList&lt;&gt;();IntStream.range(0, 10000).parallel().forEach(result::add);// 正解：用 collect 归约，让框架处理分区与合并List&lt;Integer&gt; result = IntStream.range(0, 10000).parallel()        .boxed().collect(Collectors.toList());
+
+适用判断：
+
+数据源可拆分（ArrayList、IntStream.range 好，LinkedList、IO 流差）；
+任务量大且单个元素处理偏 CPU 密集，小集合的拆分支配&#x2F;合并开销反而更慢；
+无共享可变状态、无顺序依赖、无 IO&#x2F;数据库调用（并行会打满公共 ForkJoinPool，把别的服务拖慢）；
+需要有序结果时别用 forEach（forEachOrdered 会抵消大部分并行收益）。
+
+线上服务里更该谨慎：Web 请求本身已经并发，再套 parallelStream 抢的是同一个公共池。
+四、Optional 的正确用法// 推荐：作为返回值，链式表达&quot;可能没有&quot;public Optional&lt;User&gt; findByEmail(String email) &#123; ... &#125;String displayName = userService.findByEmail(email)        .map(User::getNickname)        .filter(s -&gt; !s.isBlank())        .orElseGet(() -&gt; &quot;用户&quot; + email.substring(0, 3));
+
+orElse 与 orElseGet 的区别是高频题：
+Optional&lt;User&gt; opt = Optional.of(user);opt.orElse(loadFromDb());       // loadFromDb() 一定执行，哪怕 opt 有值opt.orElseGet(() -&gt; loadFromDb()); // 只有为空时才执行
+
+orElse 的参数是先求值再传进去的，如果里面是远程调用&#x2F;查库，代价很实在。
+
+
+
+不要用
+原因
+
+
+
+Optional.get() 不先判断
+空值时抛 NoSuchElementException，等于换了个 NPE
+
+
+字段&#x2F;参数声明成 Optional
+设计意图是返回值；字段用它会让序列化、JPA 映射变得麻烦
+
+
+Optional.of(null)
+直接 NPE，应为 ofNullable
+
+
+if (opt != null)
+Optional 本身不该为 null，返回空用 Optional.empty()
+
+
+Optional 里套 Optional
+用 flatMap 拍平
+
+
+五、性能与可读性Stream 有 lambda、装箱、函数对象等开销，几十个元素的简单循环里手写 for 通常更快，但差距在微基准之外基本可以忽略。取舍标准是可读性：多步过滤&#x2F;映射&#x2F;分组用 Stream 明显更清晰；带 break、多重下标、需要修改外部状态的逻辑用循环更直接。
+两个容易忽略的点：
+// 无限流必须配 limit，否则终端操作不会结束Stream.iterate(0, i -&gt; i + 1).limit(10).forEach(System.out::println);// 流中修改源集合会触发 ConcurrentModificationException（或结果不确定）users.stream().filter(...).forEach(u -&gt; users.remove(u));  // 禁止
+
+六、面试怎么答
+什么是惰性求值？ → 中间操作只构建管道，终端操作才触发遍历；好处是可以做短路（findFirst、anyMatch）和循环融合，避免多次遍历。
+findFirst 和 findAny 区别？ → 前者保证按 encounter order 返回第一个，后者在并行流里可返回任意一个以换取性能；串行流下通常结果一样，但不要依赖。
+reduce 与 collect 区别？ → reduce 把元素归约成一个不可变结果（如求和），collect 用可变容器累加，适合收集成集合&#x2F;Map。
+orElse 和 orElseGet？ → 前者参数无论是否为空都会求值，后者惰性。
+
+七、踩坑清单
+Stream 别存成字段反复用，用完即弃；
+Collectors.toMap 一律显式处理重复 key；
+parallelStream 里别碰共享集合、别查数据库；
+map 返回 null 会让后续 collect 或 toMap 炸掉，先 filter(Objects::nonNull)；
+基本类型流用 IntStream &#x2F; LongStream 避免装箱，sum() 比 reduce(0, Integer::sum) 更直白；
+Optional 不要用在 DTO&#x2F;JSON 序列化上，Jackson 需要额外模块才能正确处理。
+
+]]></content>
+      <categories>
+        <category>Java基础</category>
+      </categories>
+      <tags>
+        <tag>Java</tag>
+        <tag>面试</tag>
+        <tag>Stream</tag>
+        <tag>Optional</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>ThreadLocal 原理、内存泄漏与异步场景下的上下文传递</title>
+    <url>/2025/08/16/java-threadlocal-notes/</url>
+    <content><![CDATA[一句话总结ThreadLocal 不是”给变量加线程安全”，而是每个线程持有自己的一份副本。它的存储挂在 Thread 对象上的 ThreadLocalMap 里；key 是弱引用，value 是强引用，线程池场景下不 remove() 就会内存泄漏并串数据。
+
+
+一、它到底存在哪// JDK 源码结构（简化）class Thread &#123;    ThreadLocal.ThreadLocalMap threadLocals = null;      // 普通 ThreadLocal 的数据    ThreadLocal.ThreadLocalMap inheritableThreadLocals = null;&#125;static class ThreadLocalMap &#123;    static class Entry extends WeakReference&lt;ThreadLocal&lt;?&gt;&gt; &#123;        Object value;        // 强引用        Entry(ThreadLocal&lt;?&gt; k, Object v) &#123; super(k); value = v; &#125;    &#125;&#125;
+
+关键：数据不在 ThreadLocal 对象里，而在线程自己的 Map 里，以 ThreadLocal 实例为 key。所以：
+
+一个 ThreadLocal 变量在不同线程里对应不同 value；
+线程结束，Map 随之可回收；
+线程不结束（线程池复用），value 会一直留在这个线程上。
+
+private static final ThreadLocal&lt;UserContext&gt; CTX = new ThreadLocal&lt;&gt;();public void handle(Request req) &#123;    try &#123;        CTX.set(parseUser(req));    // 绑定当前线程        doBiz();                    // 后续任意层级都能 CTX.get()    &#125; finally &#123;        CTX.remove();               // 必须！    &#125;&#125;
+
+二、为什么弱引用还会内存泄漏Thread(强) → ThreadLocalMap → Entry → value(强)                                ↘ key(弱引用) → ThreadLocal 实例
+
+如果 ThreadLocal 实例失去了外部强引用（比如局部 new 出来用完了），GC 会回收它，Entry 的 key 变成 null，但 value 仍被 Entry 强引用着，而 Entry 又被长期存活的线程池线程引用。于是 value 永远取不到、也回收不掉——这就是所谓的泄漏。
+ThreadLocalMap 在 get/set/remove 时会顺路清理 key 为 null 的陈旧 Entry（expungeStaleEntry），但这是被动触发：如果之后这个线程再不碰 ThreadLocal，清理就不会发生。
+所以正确姿势只有一条：用完 remove()，放在 finally 里。
+
+面试常问”key 为什么设计成弱引用”：这是为了在 ThreadLocal 本身已无用时至少让 key 能被回收、给 Map 一个发现”这个 entry 已废弃”的机会；它并不能自动回收 value，所以仍要手动 remove。
+
+三、典型用途
+
+
+场景
+怎么用
+
+
+
+登录用户上下文
+拦截器 set，finally remove，Service 层随处 get
+
+
+链路追踪 traceId
+日志 MDC 底层就是 ThreadLocal
+
+
+事务 &#x2F; 连接绑定
+Spring TransactionSynchronizationManager 把 Connection 绑到线程
+
+
+分页参数透传
+PageHelper 用 ThreadLocal 存 page 信息
+
+
+非线程安全对象复用
+SimpleDateFormat 每线程一份
+
+
+private static final ThreadLocal&lt;SimpleDateFormat&gt; FMT =        ThreadLocal.withInitial(() -&gt; new SimpleDateFormat(&quot;yyyy-MM-dd&quot;));// withInitial 只是第一次 get() 时懒初始化，不等于自动清理
+
+Spring 的 RequestContextHolder、SecurityContextHolder 也都基于它，所以异步线程里拿不到登录用户是同一个原因，不是框架 bug。
+四、父子线程与线程池InheritableThreadLocal 在创建子线程时把父线程的 Map 复制一份，能实现一次性传递。但线程池里线程是复用的：
+
+线程早就创建好了，不会再走”创建时复制”；
+上一个任务遗留的 value 可能被下一个任务读到，造成数据串味（用户 A 的上下文被用户 B 的请求看到）。
+
+解决思路：
+// 异步前显式捕获，异步内显式恢复，并清理UserContext ctx = CTX.get();executor.submit(() -&gt; &#123;    try &#123;        CTX.set(ctx);        doAsyncBiz();    &#125; finally &#123;        CTX.remove();    &#125;&#125;);
+
+生产项目更常用阿里的 TransmittableThreadLocal（TTL），包装线程池后由框架负责捕获&#x2F;回放&#x2F;恢复。CompletableFuture、 @Async、MQ 消费者线程都要按这个思路处理。
+五、面试怎么答
+ThreadLocal 原理？ → 每个 Thread 持有 ThreadLocalMap，以 ThreadLocal 弱引用为 key 存 value；get&#x2F;set 操作的是当前线程的 Map，因此天然线程隔离。
+为什么会内存泄漏？ → 线程池线程长期存活，key 被 GC 后 value 仍被强引用且无法访问；被动清理不保证及时，必须 remove。
+ThreadLocal 和 synchronized 区别？ → 前者用”各存一份”避免共享，空间换时间；后者用”同一时刻只让一个线程访问”串行化，时间换空间。
+异步怎么传上下文？ → InheritableThreadLocal 在线程池下失效，需显式传递 + 清理，或用 TTL。
+
+六、踩坑清单
+remove() 一定放 finally，业务抛异常也不能漏；
+别把大对象、集合、Connection 长期挂在 ThreadLocal 上；
+static final 声明 ThreadLocal 实例，避免每次 new 导致 key 不同；
+拦截器&#x2F;Filter 里 set 了，就必须有对应的清理点，别只依赖框架；
+用 ThreadLocal.withInitial 时别以为它会替你回收；
+子线程、@Async、定时任务、MQ 消费者里默认没有 Web 请求的上下文，取不到值先查这条链路，别急着加全局静态变量。
+
+]]></content>
+      <categories>
+        <category>Java基础</category>
+      </categories>
+      <tags>
+        <tag>Java</tag>
+        <tag>并发</tag>
+        <tag>面试</tag>
+        <tag>ThreadLocal</tag>
       </tags>
   </entry>
   <entry>
@@ -1031,92 +1120,100 @@ shutdown() 不再接新任务、等已提交的跑完；shutdownNow() 中断线�
       </tags>
   </entry>
   <entry>
-    <title>ThreadLocal 原理、内存泄漏与异步场景下的上下文传递</title>
-    <url>/2025/08/16/java-threadlocal-notes/</url>
-    <content><![CDATA[一句话总结ThreadLocal 不是”给变量加线程安全”，而是每个线程持有自己的一份副本。它的存储挂在 Thread 对象上的 ThreadLocalMap 里；key 是弱引用，value 是强引用，线程池场景下不 remove() 就会内存泄漏并串数据。
+    <title>JVM 内存结构与垃圾回收：一次讲清楚</title>
+    <url>/2026/04/11/jvm-memory-gc-notes/</url>
+    <content><![CDATA[运行时数据区
 
 
-一、它到底存在哪// JDK 源码结构（简化）class Thread &#123;    ThreadLocal.ThreadLocalMap threadLocals = null;      // 普通 ThreadLocal 的数据    ThreadLocal.ThreadLocalMap inheritableThreadLocals = null;&#125;static class ThreadLocalMap &#123;    static class Entry extends WeakReference&lt;ThreadLocal&lt;?&gt;&gt; &#123;        Object value;        // 强引用        Entry(ThreadLocal&lt;?&gt; k, Object v) &#123; super(k); value = v; &#125;    &#125;&#125;
-
-关键：数据不在 ThreadLocal 对象里，而在线程自己的 Map 里，以 ThreadLocal 实例为 key。所以：
-
-一个 ThreadLocal 变量在不同线程里对应不同 value；
-线程结束，Map 随之可回收；
-线程不结束（线程池复用），value 会一直留在这个线程上。
-
-private static final ThreadLocal&lt;UserContext&gt; CTX = new ThreadLocal&lt;&gt;();public void handle(Request req) &#123;    try &#123;        CTX.set(parseUser(req));    // 绑定当前线程        doBiz();                    // 后续任意层级都能 CTX.get()    &#125; finally &#123;        CTX.remove();               // 必须！    &#125;&#125;
-
-二、为什么弱引用还会内存泄漏Thread(强) → ThreadLocalMap → Entry → value(强)                                ↘ key(弱引用) → ThreadLocal 实例
-
-如果 ThreadLocal 实例失去了外部强引用（比如局部 new 出来用完了），GC 会回收它，Entry 的 key 变成 null，但 value 仍被 Entry 强引用着，而 Entry 又被长期存活的线程池线程引用。于是 value 永远取不到、也回收不掉——这就是所谓的泄漏。
-ThreadLocalMap 在 get/set/remove 时会顺路清理 key 为 null 的陈旧 Entry（expungeStaleEntry），但这是被动触发：如果之后这个线程再不碰 ThreadLocal，清理就不会发生。
-所以正确姿势只有一条：用完 remove()，放在 finally 里。
-
-面试常问”key 为什么设计成弱引用”：这是为了在 ThreadLocal 本身已无用时至少让 key 能被回收、给 Map 一个发现”这个 entry 已废弃”的机会；它并不能自动回收 value，所以仍要手动 remove。
-
-三、典型用途
-
-
-场景
-怎么用
+区域
+线程
+说明
 
 
 
-登录用户上下文
-拦截器 set，finally remove，Service 层随处 get
+程序计数器
+私有
+当前字节码行号，唯一不会 OOM 的区域
 
 
-链路追踪 traceId
-日志 MDC 底层就是 ThreadLocal
+虚拟机栈
+私有
+每个方法一个栈帧（局部变量表、操作数栈）
 
 
-事务 &#x2F; 连接绑定
-Spring TransactionSynchronizationManager 把 Connection 绑到线程
+本地方法栈
+私有
+native 方法
 
 
-分页参数透传
-PageHelper 用 ThreadLocal 存 page 信息
+堆
+共享
+对象实例，GC 主战场
 
 
-非线程安全对象复用
-SimpleDateFormat 每线程一份
+方法区（元空间）
+共享
+类元信息、常量、静态变量，JDK 8 后移出堆
 
 
-private static final ThreadLocal&lt;SimpleDateFormat&gt; FMT =        ThreadLocal.withInitial(() -&gt; new SimpleDateFormat(&quot;yyyy-MM-dd&quot;));// withInitial 只是第一次 get() 时懒初始化，不等于自动清理
 
-Spring 的 RequestContextHolder、SecurityContextHolder 也都基于它，所以异步线程里拿不到登录用户是同一个原因，不是框架 bug。
-四、父子线程与线程池InheritableThreadLocal 在创建子线程时把父线程的 Map 复制一份，能实现一次性传递。但线程池里线程是复用的：
 
-线程早就创建好了，不会再走”创建时复制”；
-上一个任务遗留的 value 可能被下一个任务读到，造成数据串味（用户 A 的上下文被用户 B 的请求看到）。
+对象怎么判死可达性分析：从 GC Roots 出发，不可达即可回收。
+GC Roots 包括：虚拟机栈中的引用、方法区静态属性、常量引用、JNI 引用、活跃线程。
 
-解决思路：
-// 异步前显式捕获，异步内显式恢复，并清理UserContext ctx = CTX.get();executor.submit(() -&gt; &#123;    try &#123;        CTX.set(ctx);        doAsyncBiz();    &#125; finally &#123;        CTX.remove();    &#125;&#125;);
+为什么不只用引用计数？解决不了循环引用。
 
-生产项目更常用阿里的 TransmittableThreadLocal（TTL），包装线程池后由框架负责捕获&#x2F;回放&#x2F;恢复。CompletableFuture、 @Async、MQ 消费者线程都要按这个思路处理。
-五、面试怎么答
-ThreadLocal 原理？ → 每个 Thread 持有 ThreadLocalMap，以 ThreadLocal 弱引用为 key 存 value；get&#x2F;set 操作的是当前线程的 Map，因此天然线程隔离。
-为什么会内存泄漏？ → 线程池线程长期存活，key 被 GC 后 value 仍被强引用且无法访问；被动清理不保证及时，必须 remove。
-ThreadLocal 和 synchronized 区别？ → 前者用”各存一份”避免共享，空间换时间；后者用”同一时刻只让一个线程访问”串行化，时间换空间。
-异步怎么传上下文？ → InheritableThreadLocal 在线程池下失效，需显式传递 + 清理，或用 TTL。
+分代与回收算法
+新生代（Eden : S0 : S1 &#x3D; 8 : 1 : 1）：对象优先在 Eden 分配，复制算法，存活对象少、复制成本低；
+老年代：大对象、长期存活对象，标记-清除 &#x2F; 标记-整理。
 
-六、踩坑清单
-remove() 一定放 finally，业务抛异常也不能漏；
-别把大对象、集合、Connection 长期挂在 ThreadLocal 上；
-static final 声明 ThreadLocal 实例，避免每次 new 导致 key 不同；
-拦截器&#x2F;Filter 里 set 了，就必须有对应的清理点，别只依赖框架；
-用 ThreadLocal.withInitial 时别以为它会替你回收；
-子线程、@Async、定时任务、MQ 消费者里默认没有 Web 请求的上下文，取不到值先查这条链路，别急着加全局静态变量。
+对象晋升老年代的条件：
 
+年龄达到阈值（默认 15，-XX:MaxTenuringThreshold）；
+大对象直接进老年代（-XX:PretenureSizeThreshold）；
+动态年龄判断：Survivor 中同龄对象总和 &gt; 一半，年龄 ≥ 该年龄的直接晋升。
+
+常见收集器
+
+
+收集器
+特点
+
+
+
+Serial &#x2F; Serial Old
+单线程，客户端模式
+
+
+ParNew &#x2F; Parallel Scavenge
+多线程，关注吞吐量
+
+
+CMS
+并发标记清除，低停顿，有碎片
+
+
+G1
+分 Region，可预测停顿，JDK 9+ 默认
+
+
+ZGC
+超低停顿（&lt; 10ms），大堆场景
+
+
+常用参数-Xms512m -Xmx512m          # 初始/最大堆，线上建议相等，避免动态扩容-Xmn256m                   # 新生代大小-XX:MetaspaceSize=128m     # 元空间初始大小-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/logs   # OOM 时自动 dump
+
+排查套路jps -l                      # 找进程jstat -gcutil &lt;pid&gt; 1000    # 每秒看 GC 情况jmap -heap &lt;pid&gt;            # 堆使用jstack &lt;pid&gt; &gt; t.txt        # 线程快照，查死锁/阻塞
+
+面试常问：为什么新生代用复制算法？（存活对象少，复制成本低，且没有内存碎片）
 ]]></content>
       <categories>
         <category>Java基础</category>
       </categories>
       <tags>
-        <tag>Java</tag>
-        <tag>并发</tag>
         <tag>面试</tag>
-        <tag>ThreadLocal</tag>
+        <tag>JVM</tag>
+        <tag>垃圾回收</tag>
       </tags>
   </entry>
   <entry>
@@ -1258,103 +1355,6 @@ static final 常量被编译期内联，改了常量值却只重发一个 jar，
         <tag>面试</tag>
         <tag>JVM</tag>
         <tag>类加载</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>JVM 内存结构与垃圾回收：一次讲清楚</title>
-    <url>/2026/04/11/jvm-memory-gc-notes/</url>
-    <content><![CDATA[运行时数据区
-
-
-区域
-线程
-说明
-
-
-
-程序计数器
-私有
-当前字节码行号，唯一不会 OOM 的区域
-
-
-虚拟机栈
-私有
-每个方法一个栈帧（局部变量表、操作数栈）
-
-
-本地方法栈
-私有
-native 方法
-
-
-堆
-共享
-对象实例，GC 主战场
-
-
-方法区（元空间）
-共享
-类元信息、常量、静态变量，JDK 8 后移出堆
-
-
-
-
-对象怎么判死可达性分析：从 GC Roots 出发，不可达即可回收。
-GC Roots 包括：虚拟机栈中的引用、方法区静态属性、常量引用、JNI 引用、活跃线程。
-
-为什么不只用引用计数？解决不了循环引用。
-
-分代与回收算法
-新生代（Eden : S0 : S1 &#x3D; 8 : 1 : 1）：对象优先在 Eden 分配，复制算法，存活对象少、复制成本低；
-老年代：大对象、长期存活对象，标记-清除 &#x2F; 标记-整理。
-
-对象晋升老年代的条件：
-
-年龄达到阈值（默认 15，-XX:MaxTenuringThreshold）；
-大对象直接进老年代（-XX:PretenureSizeThreshold）；
-动态年龄判断：Survivor 中同龄对象总和 &gt; 一半，年龄 ≥ 该年龄的直接晋升。
-
-常见收集器
-
-
-收集器
-特点
-
-
-
-Serial &#x2F; Serial Old
-单线程，客户端模式
-
-
-ParNew &#x2F; Parallel Scavenge
-多线程，关注吞吐量
-
-
-CMS
-并发标记清除，低停顿，有碎片
-
-
-G1
-分 Region，可预测停顿，JDK 9+ 默认
-
-
-ZGC
-超低停顿（&lt; 10ms），大堆场景
-
-
-常用参数-Xms512m -Xmx512m          # 初始/最大堆，线上建议相等，避免动态扩容-Xmn256m                   # 新生代大小-XX:MetaspaceSize=128m     # 元空间初始大小-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/logs   # OOM 时自动 dump
-
-排查套路jps -l                      # 找进程jstat -gcutil &lt;pid&gt; 1000    # 每秒看 GC 情况jmap -heap &lt;pid&gt;            # 堆使用jstack &lt;pid&gt; &gt; t.txt        # 线程快照，查死锁/阻塞
-
-面试常问：为什么新生代用复制算法？（存活对象少，复制成本低，且没有内存碎片）
-]]></content>
-      <categories>
-        <category>Java基础</category>
-      </categories>
-      <tags>
-        <tag>面试</tag>
-        <tag>JVM</tag>
-        <tag>垃圾回收</tag>
       </tags>
   </entry>
   <entry>
@@ -1524,61 +1524,6 @@ NULL 能走索引吗？可以，但 IS NULL 选择性差，通常意义不大。
       </tags>
   </entry>
   <entry>
-    <title>项目实战：游记模块的接口设计与缓存实践</title>
-    <url>/2026/08/08/note-module-design-notes/</url>
-    <content><![CDATA[记录一个”游记模块”从表结构到接口的完整设计过程，重点在分页排序、收藏幂等、评论关联这三块。
-
-
-表结构拆分
-
-
-表
-作用
-
-
-
-ta_note
-游记主表（标题、封面、作者、统计数、状态）
-
-
-ta_note_content
-正文单独存（大字段拆表，列表查询不拖正文）
-
-
-ta_note_comment
-评论（ref_id 指向被回复的评论）
-
-
-拆表的原因：列表页只需要主表字段，正文几 KB 到几十 KB，放一起会让分页查询变慢。
-分页 + 排序：白名单前端传 orderBy 不能直接拼进 SQL：
-Map&lt;String, SFunction&lt;Note, ?&gt;&gt; white = Map.of(    &quot;viewnum&quot;, Note::getViewnum,    &quot;createTime&quot;, Note::getCreateTime);SFunction&lt;Note, ?&gt; col = white.getOrDefault(qo.getOrderBy(), Note::getCreateTime);
-
-永远不要把前端字符串直接拼进 ORDER BY，这是 SQL 注入的高危点。
-收藏：一个接口 + 幂等前端有两个按钮（收藏&#x2F;取消收藏），但后端只需要一个方法：
-Boolean favor(Long id, boolean on) &#123;    String key = &quot;user_note_collect:&quot; + SecurityUtils.getUserId();    if (!redisService.hasKey(key)) &#123;   // Redis 不能存空集合，用 -1 占位        redisService.setCacheSet(key, Set.of(-1L));    &#125;    if (on == redisService.isCacheSetContains(key, id)) return on;  // 幂等    if (on) redisService.addCacheSetValue(key, id);    else    redisService.deleteCacheSetValue(key, id);    // 收藏数落库    return on;&#125;
-
-好处：重复点击不会把收藏数越加越大；状态查询直接 SMEMBERS，不用回表。
-评论：避免 N+1评论列表要显示”评论人昵称”和”引用的原评论”，最忌讳在循环里查用户：
-// 一次拉用户Map&lt;Long, UserInfo&gt; userMap = users.stream()        .collect(Collectors.toMap(UserInfo::getId, u -&gt; u));// 一次查被引用的评论Map&lt;Long, NoteComment&gt; refMap = listByIds(refIds).stream()        .collect(Collectors.toMap(NoteComment::getId, c -&gt; c));
-
-两次批量查询替代 2N 次单查，列表接口从几百毫秒降到几十毫秒。
-小结
-大字段拆表；
-排序键白名单；
-写操作幂等；
-关联数据批量查。
-
-]]></content>
-      <categories>
-        <category>项目实战</category>
-      </categories>
-      <tags>
-        <tag>微服务</tag>
-        <tag>Redis</tag>
-        <tag>MyBatis-Plus</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>Nacos：注册中心与配置中心的实战用法</title>
     <url>/2026/09/05/nacos-registry-config-notes/</url>
     <content><![CDATA[两个角色Nacos 同时是注册中心（服务发现）和配置中心（集中管理配置）。
@@ -1688,6 +1633,93 @@ Redis 单线程为什么快？纯内存 + IO 多路复用 + 单线程无锁竞�
       </tags>
   </entry>
   <entry>
+    <title>项目实战：游记模块的接口设计与缓存实践</title>
+    <url>/2026/08/08/note-module-design-notes/</url>
+    <content><![CDATA[记录一个”游记模块”从表结构到接口的完整设计过程，重点在分页排序、收藏幂等、评论关联这三块。
+
+
+表结构拆分
+
+
+表
+作用
+
+
+
+ta_note
+游记主表（标题、封面、作者、统计数、状态）
+
+
+ta_note_content
+正文单独存（大字段拆表，列表查询不拖正文）
+
+
+ta_note_comment
+评论（ref_id 指向被回复的评论）
+
+
+拆表的原因：列表页只需要主表字段，正文几 KB 到几十 KB，放一起会让分页查询变慢。
+分页 + 排序：白名单前端传 orderBy 不能直接拼进 SQL：
+Map&lt;String, SFunction&lt;Note, ?&gt;&gt; white = Map.of(    &quot;viewnum&quot;, Note::getViewnum,    &quot;createTime&quot;, Note::getCreateTime);SFunction&lt;Note, ?&gt; col = white.getOrDefault(qo.getOrderBy(), Note::getCreateTime);
+
+永远不要把前端字符串直接拼进 ORDER BY，这是 SQL 注入的高危点。
+收藏：一个接口 + 幂等前端有两个按钮（收藏&#x2F;取消收藏），但后端只需要一个方法：
+Boolean favor(Long id, boolean on) &#123;    String key = &quot;user_note_collect:&quot; + SecurityUtils.getUserId();    if (!redisService.hasKey(key)) &#123;   // Redis 不能存空集合，用 -1 占位        redisService.setCacheSet(key, Set.of(-1L));    &#125;    if (on == redisService.isCacheSetContains(key, id)) return on;  // 幂等    if (on) redisService.addCacheSetValue(key, id);    else    redisService.deleteCacheSetValue(key, id);    // 收藏数落库    return on;&#125;
+
+好处：重复点击不会把收藏数越加越大；状态查询直接 SMEMBERS，不用回表。
+评论：避免 N+1评论列表要显示”评论人昵称”和”引用的原评论”，最忌讳在循环里查用户：
+// 一次拉用户Map&lt;Long, UserInfo&gt; userMap = users.stream()        .collect(Collectors.toMap(UserInfo::getId, u -&gt; u));// 一次查被引用的评论Map&lt;Long, NoteComment&gt; refMap = listByIds(refIds).stream()        .collect(Collectors.toMap(NoteComment::getId, c -&gt; c));
+
+两次批量查询替代 2N 次单查，列表接口从几百毫秒降到几十毫秒。
+小结
+大字段拆表；
+排序键白名单；
+写操作幂等；
+关联数据批量查。
+
+]]></content>
+      <categories>
+        <category>项目实战</category>
+      </categories>
+      <tags>
+        <tag>微服务</tag>
+        <tag>Redis</tag>
+        <tag>MyBatis-Plus</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Spring Cloud Alibaba：OpenFeign + Nacos 实战笔记</title>
+    <url>/2026/06/20/spring-cloud-openfeign-notes/</url>
+    <content><![CDATA[微服务之间互相调用，最省事的做法是把 Feign 契约单独抽到 api 模块，provider 实现、consumer 声明式调用。
+
+
+目录结构约定travel-api-user          # 契约：Feign 接口 + 实体travel-modules-user      # 提供者：实现 Feign 接口 + 业务travel-modules-order     # 消费者：注入 RemoteUserService
+
+契约（api 模块）@FeignClient(name = ServiceNameConstants.USER_SERVICE,             contextId = &quot;remoteUserService&quot;,             fallbackFactory = RemoteUserFallbackFactory.class)public interface RemoteUserService &#123;    @GetMapping(&quot;/user/feign/&#123;id&#125;&quot;)    R&lt;UserInfo&gt; getOne(@PathVariable(&quot;id&quot;) Long id,                       @RequestHeader(SecurityConstants.FROM_SOURCE) String source);&#125;
+
+提供者（模块内）@InnerAuth   // 只允许内部调用，会校验 from-source 请求头@GetMapping(&quot;/feign/&#123;id&#125;&quot;)public R&lt;UserInfo&gt; feignGet(@PathVariable Long id) &#123;    return R.ok(userInfoService.getById(id));&#125;
+
+注意：@InnerAuth 依赖网关&#x2F;调用方注入的 from-source: inner 头，外部直接访问会被拦截。
+三个容易踩的坑
+降级返回的是 R.fail() 而不是 null —— 消费方必须判 R.isError()，否则 NPE；
+方法名不用和提供者一致，Feign 只认 HTTP 方法 + 路径 + 参数位置；
+超时：默认 1 秒，跨服务查库&#x2F;掉 Redis 很容易超，要在配置里调：
+
+feign:  client:    config:      default:        connectTimeout: 5000        readTimeout: 10000
+
+为什么服务名而不是 IP服务名由 Nacos 注册中心解析，实例扩缩容、换端口都不用改代码。
+]]></content>
+      <categories>
+        <category>框架与中间件</category>
+      </categories>
+      <tags>
+        <tag>微服务</tag>
+        <tag>Spring Cloud</tag>
+        <tag>Nacos</tag>
+        <tag>OpenFeign</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>Spring IOC 与 AOP：原理与常见坑</title>
     <url>/2026/07/04/spring-ioc-aop-notes/</url>
     <content><![CDATA[IOC 到底解决了什么控制反转 &#x3D; 对象的创建和依赖注入交给容器。好处：解耦、便于替换实现（面向接口）、统一管理生命周期。
@@ -1759,35 +1791,45 @@ private 方法加注解无效（代理不了）；
       </tags>
   </entry>
   <entry>
-    <title>Spring Cloud Alibaba：OpenFeign + Nacos 实战笔记</title>
-    <url>/2026/06/20/spring-cloud-openfeign-notes/</url>
-    <content><![CDATA[微服务之间互相调用，最省事的做法是把 Feign 契约单独抽到 api 模块，provider 实现、consumer 声明式调用。
+    <title>Spring 事务失效的六种场景（附解决方案）</title>
+    <url>/2026/06/06/spring-transaction-notes/</url>
+    <content><![CDATA[@Transactional 加了却不回滚？基本就这六种原因。
 
 
-目录结构约定travel-api-user          # 契约：Feign 接口 + 实体travel-modules-user      # 提供者：实现 Feign 接口 + 业务travel-modules-order     # 消费者：注入 RemoteUserService
+1. 同类内部方法调用（最常见）public void a() &#123;    b();          // 直接 this.b()，不走代理 → 事务失效&#125;@Transactionalpublic void b() &#123; ... &#125;
 
-契约（api 模块）@FeignClient(name = ServiceNameConstants.USER_SERVICE,             contextId = &quot;remoteUserService&quot;,             fallbackFactory = RemoteUserFallbackFactory.class)public interface RemoteUserService &#123;    @GetMapping(&quot;/user/feign/&#123;id&#125;&quot;)    R&lt;UserInfo&gt; getOne(@PathVariable(&quot;id&quot;) Long id,                       @RequestHeader(SecurityConstants.FROM_SOURCE) String source);&#125;
+原因：Spring 事务靠 AOP 代理实现，this.b() 绕过了代理对象。
+解决：
+// 方案一：注入自己（注意循环依赖，可用 @Lazy）@Autowired @Lazy private XxxService self;self.b();// 方案二：AopContext（需 @EnableAspectJAutoProxy(exposeProxy = true)）((XxxService) AopContext.currentProxy()).b();// 方案三：把 b() 拆到另一个类
 
-提供者（模块内）@InnerAuth   // 只允许内部调用，会校验 from-source 请求头@GetMapping(&quot;/feign/&#123;id&#125;&quot;)public R&lt;UserInfo&gt; feignGet(@PathVariable Long id) &#123;    return R.ok(userInfoService.getById(id));&#125;
+2. 方法不是 public@Transactional 基于代理，private &#x2F; protected &#x2F; static &#x2F; final 方法都失效。
+3. 异常被自己 catch 了try &#123;    doSomething();&#125; catch (Exception e) &#123;    log.error(&quot;出错了&quot;, e);   // 吞掉了异常 → 事务不会回滚&#125;
 
-注意：@InnerAuth 依赖网关&#x2F;调用方注入的 from-source: inner 头，外部直接访问会被拦截。
-三个容易踩的坑
-降级返回的是 R.fail() 而不是 null —— 消费方必须判 R.isError()，否则 NPE；
-方法名不用和提供者一致，Feign 只认 HTTP 方法 + 路径 + 参数位置；
-超时：默认 1 秒，跨服务查库&#x2F;掉 Redis 很容易超，要在配置里调：
+事务管理器靠捕获异常决定回滚，你吞掉它就认为一切正常。
+4. 抛的是受检异常默认只对 RuntimeException 和 Error 回滚。抛 IOException 不会回滚。
+解决：@Transactional(rollbackFor = Exception.class)
+5. 数据库引擎不支持事务MyISAM 不支持事务，表引擎必须是 InnoDB。
+6. 多线程 &#x2F; 异步@Transactionalpublic void a() &#123;    new Thread(() -&gt; b()).start();   // 新线程不在同一个事务上下文&#125;
 
-feign:  client:    config:      default:        connectTimeout: 5000        readTimeout: 10000
+事务绑定在当前线程（ThreadLocal），子线程是独立的事务。
+附加：传播行为搞错REQUIRES_NEW 会挂起外层事务开新事务；如果外层回滚，内层已提交的数据不会回滚。
+自检清单
+ 方法 public 吗？
+ 是通过代理（别的 Bean）调用的吗？
+ 异常没被吞掉吗？
+ rollbackFor 设了吗？
+ 表是 InnoDB 吗？
+ 是同一个线程里执行的？
 
-为什么服务名而不是 IP服务名由 Nacos 注册中心解析，实例扩缩容、换端口都不用改代码。
+面试一句话：Spring 事务本质是 AOP 代理 + ThreadLocal 绑定连接，所以绕过代理、换线程、吞异常都会失效。
 ]]></content>
       <categories>
         <category>框架与中间件</category>
       </categories>
       <tags>
-        <tag>微服务</tag>
-        <tag>Spring Cloud</tag>
-        <tag>Nacos</tag>
-        <tag>OpenFeign</tag>
+        <tag>Spring</tag>
+        <tag>面试</tag>
+        <tag>事务</tag>
       </tags>
   </entry>
   <entry>
@@ -1909,48 +1951,6 @@ starter 里不要塞 application.yml、不要带版本冲突的 Spring 依赖，
         <tag>面试</tag>
         <tag>Spring Boot</tag>
         <tag>自动配置</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>Spring 事务失效的六种场景（附解决方案）</title>
-    <url>/2026/06/06/spring-transaction-notes/</url>
-    <content><![CDATA[@Transactional 加了却不回滚？基本就这六种原因。
-
-
-1. 同类内部方法调用（最常见）public void a() &#123;    b();          // 直接 this.b()，不走代理 → 事务失效&#125;@Transactionalpublic void b() &#123; ... &#125;
-
-原因：Spring 事务靠 AOP 代理实现，this.b() 绕过了代理对象。
-解决：
-// 方案一：注入自己（注意循环依赖，可用 @Lazy）@Autowired @Lazy private XxxService self;self.b();// 方案二：AopContext（需 @EnableAspectJAutoProxy(exposeProxy = true)）((XxxService) AopContext.currentProxy()).b();// 方案三：把 b() 拆到另一个类
-
-2. 方法不是 public@Transactional 基于代理，private &#x2F; protected &#x2F; static &#x2F; final 方法都失效。
-3. 异常被自己 catch 了try &#123;    doSomething();&#125; catch (Exception e) &#123;    log.error(&quot;出错了&quot;, e);   // 吞掉了异常 → 事务不会回滚&#125;
-
-事务管理器靠捕获异常决定回滚，你吞掉它就认为一切正常。
-4. 抛的是受检异常默认只对 RuntimeException 和 Error 回滚。抛 IOException 不会回滚。
-解决：@Transactional(rollbackFor = Exception.class)
-5. 数据库引擎不支持事务MyISAM 不支持事务，表引擎必须是 InnoDB。
-6. 多线程 &#x2F; 异步@Transactionalpublic void a() &#123;    new Thread(() -&gt; b()).start();   // 新线程不在同一个事务上下文&#125;
-
-事务绑定在当前线程（ThreadLocal），子线程是独立的事务。
-附加：传播行为搞错REQUIRES_NEW 会挂起外层事务开新事务；如果外层回滚，内层已提交的数据不会回滚。
-自检清单
- 方法 public 吗？
- 是通过代理（别的 Bean）调用的吗？
- 异常没被吞掉吗？
- rollbackFor 设了吗？
- 表是 InnoDB 吗？
- 是同一个线程里执行的？
-
-面试一句话：Spring 事务本质是 AOP 代理 + ThreadLocal 绑定连接，所以绕过代理、换线程、吞异常都会失效。
-]]></content>
-      <categories>
-        <category>框架与中间件</category>
-      </categories>
-      <tags>
-        <tag>Spring</tag>
-        <tag>面试</tag>
-        <tag>事务</tag>
       </tags>
   </entry>
 </search>

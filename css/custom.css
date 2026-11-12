@@ -18,16 +18,18 @@
   --shadow-up:  0 14px 32px rgba(37,99,235,.13);
 }
 html[data-theme="dark"] {
-  --brand:      #60a5fa;
-  --brand-2:    #38bdf8;
-  --ink:        #e6edf7;
-  --ink-2:      #b3bfd0;
-  --ink-3:      #8c98aa;
-  --line:       #2c3849;
-  --card:       #1b2431;
-  --soft:       #222d3d;
-  --shadow:     0 8px 26px rgba(0,0,0,.26);
-  --shadow-up:  0 14px 34px rgba(0,0,0,.36);
+  /* 与主题暗色底 #18171d 同色系，避免卡片泛蓝、跟页面割裂 */
+  --brand:      #7cb6ff;
+  --brand-2:    #4fd1e5;
+  --ink:        #eef3fb;
+  --ink-2:      #cbd6e6;
+  --ink-3:      #a8b5c8;
+  --line:       #333b49;
+  --card:       #1e222b;
+  --soft:       #262c37;
+  --accent:     rgba(124,182,255,.13);
+  --shadow:     0 8px 26px rgba(0,0,0,.32);
+  --shadow-up:  0 16px 36px rgba(0,0,0,.48);
 }
 
 /* ---------- 全局细节 ---------- */
@@ -220,6 +222,14 @@ html[data-theme="dark"] #aside-content .card-widget.card-info {
 #aside-content .card-info .author-info__description { color: var(--ink) !important; }
 #aside-content .card-info .author-info__name { color: var(--brand) !important; }
 #aside-content .card-info .avatar-img { border: 3px solid #fff !important; box-shadow: 0 4px 14px rgba(31,45,74,.12); }
+/* 主题默认把这段描述做成 hover 时绝对定位浮在头像上的浮层，
+   容易和名字下方的小字叠在一起；直接去掉浮层，只留正常排版的一行说明 */
+#aside-content .card-info .author-info__description { display: none !important; }
+#aside-content .card-info .author-info__desc {
+  line-height: 1.7 !important; margin-top: 6px !important;
+  font-size: 12px !important; opacity: .9 !important;
+  color: var(--ink-2) !important;
+}
 /* 左下角飘来飘去的「再见 (good bye)」气泡，去掉 */
 #author-info__sayhi { display: none !important; }
 
@@ -420,3 +430,136 @@ html[data-theme="dark"] .my-hero__stat { background: rgba(255,255,255,.05); }
   .my-hero h1 { font-size: 22px; }
   .my-topics__grid { grid-template-columns: 1fr; }
 }
+
+/* ==========================================================
+   暗色模式精修
+   亮色规则里的 rgba(37,99,235,...) 在深底上几乎看不见，
+   这里逐项换成提亮后的蓝 / 青，并补足卡片与页面的层次。
+   ========================================================== */
+
+/* 全局：暗色下页面底色由主题给出，这里把滚动条与选中色收干净 */
+html[data-theme="dark"] ::selection { background: rgba(124,182,255,.26) !important; color: #fff !important; }
+html[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #46536b, #2c3646) !important;
+}
+html[data-theme="dark"] #page-header.full_page {
+  border-bottom: 1px solid #2a3346;
+  box-shadow: 0 12px 34px rgba(0,0,0,.34);
+}
+html[data-theme="dark"] #nav .menus_items .menus_item a { color: #dbe5f2 !important; }
+
+/* 分类快捷栏 */
+html[data-theme="dark"] #category-bar { border-color: #39424f !important; }
+html[data-theme="dark"] #catalog-list .catalog-list-item > a {
+  background: var(--soft); border-color: #3a4351; color: var(--ink-2) !important;
+}
+html[data-theme="dark"] #catalog-list .catalog-list-item > a:hover,
+html[data-theme="dark"] #catalog-list .catalog-list-item.select > a {
+  background: linear-gradient(120deg, #3b82f6, #38bdf8) !important;
+  color: #fff !important; box-shadow: 0 6px 18px rgba(0,0,0,.34);
+}
+
+/* 文章卡片 */
+html[data-theme="dark"] #recent-posts > .recent-post-item { border-color: #333b49 !important; }
+html[data-theme="dark"] #recent-posts > .recent-post-item:hover {
+  border-color: rgba(124,182,255,.55) !important;
+}
+html[data-theme="dark"] #recent-posts .article-categories-original {
+  background: rgba(124,182,255,.15); color: #a5caff !important;
+}
+html[data-theme="dark"] #recent-posts .newPost {
+  background: rgba(245,158,11,.16); color: #f2bc6b !important;
+}
+html[data-theme="dark"] #recent-posts .article-meta__tags:hover {
+  border-color: rgba(124,182,255,.5); background: var(--soft) !important;
+}
+/* 封面：暗色下压一点亮度、去掉发灰的高光斜纹 */
+html[data-theme="dark"] #recent-posts > .recent-post-item > .post_cover img.post_bg {
+  filter: saturate(.78) brightness(.9);
+}
+html[data-theme="dark"] #recent-posts > .recent-post-item > .post_cover::after {
+  background:
+    linear-gradient(180deg, rgba(6,12,24,.02), rgba(6,12,24,.30)),
+    repeating-linear-gradient(115deg, rgba(255,255,255,.035) 0 2px, transparent 2px 16px);
+}
+
+/* 侧栏 */
+html[data-theme="dark"] #aside-content .card-widget { border-color: #333b49 !important; }
+html[data-theme="dark"] #aside-content .card-widget.card-info {
+  background: linear-gradient(150deg, #242c3b 0%, #1e222b 64%) !important;
+}
+html[data-theme="dark"] #aside-content .card-info .avatar-img {
+  border-color: #313a49 !important; box-shadow: 0 5px 18px rgba(0,0,0,.45);
+}
+html[data-theme="dark"] .tech-stats .stat { background: var(--soft); border-color: #39424f; }
+html[data-theme="dark"] #aside-content .card-tag-cloud a { border-color: #3a4351; }
+html[data-theme="dark"] #aside-content .card-tag-cloud a:hover {
+  background: #3b82f6 !important; color: #fff !important;
+}
+
+/* 正文阅读：代码块、表格、引用、行内代码 */
+html[data-theme="dark"] #article-container h2 {
+  background: linear-gradient(90deg, rgba(124,182,255,.12), transparent 70%);
+}
+html[data-theme="dark"] #article-container figure.highlight,
+html[data-theme="dark"] #article-container pre {
+  background: #171a21 !important; border-color: #333b49 !important;
+}
+html[data-theme="dark"] #article-container table th {
+  background: rgba(124,182,255,.14); color: var(--ink) !important;
+}
+html[data-theme="dark"] #article-container table td,
+html[data-theme="dark"] #article-container table th { border-color: #3a4351; }
+html[data-theme="dark"] #article-container table tr:nth-child(even) {
+  background: rgba(124,182,255,.05);
+}
+html[data-theme="dark"] #article-container p code,
+html[data-theme="dark"] #article-container li code,
+html[data-theme="dark"] #article-container td code {
+  background: rgba(124,182,255,.14); color: #ffd591;
+}
+html[data-theme="dark"] #article-container blockquote {
+  border-left-color: #4fd1e5; background: rgba(79,209,229,.10);
+}
+html[data-theme="dark"] .callout {
+  border-color: rgba(124,182,255,.30); background: rgba(124,182,255,.10);
+}
+html[data-theme="dark"] .series-nav { background: var(--soft); border-color: #39424f; }
+
+/* 首页欢迎横幅 */
+html[data-theme="dark"] .my-hero {
+  border-color: #34415a;
+  background:
+    radial-gradient(circle at 88% 12%, rgba(79,209,229,.13), transparent 42%),
+    radial-gradient(circle at 8% 92%, rgba(124,182,255,.10), transparent 46%),
+    linear-gradient(120deg, #1d2634, #212c3e 65%, #1c2634);
+  box-shadow: 0 14px 36px rgba(0,0,0,.36);
+}
+html[data-theme="dark"] .my-hero::after { border-color: rgba(124,182,255,.07); }
+html[data-theme="dark"] .my-hero__eyebrow {
+  color: #a5caff; background: rgba(124,182,255,.14);
+  border-color: rgba(124,182,255,.30);
+}
+html[data-theme="dark"] .my-hero__stat {
+  background: rgba(255,255,255,.05); border-color: #3a465b;
+}
+html[data-theme="dark"] .my-hero__actions .btn-primary {
+  box-shadow: 0 6px 18px rgba(59,130,246,.32);
+}
+html[data-theme="dark"] .my-hero__actions .btn-ghost {
+  background: rgba(255,255,255,.06); color: var(--ink-2);
+}
+html[data-theme="dark"] .my-hero__actions .btn-ghost:hover {
+  border-color: rgba(124,182,255,.55);
+}
+
+/* 专题四宫格：亮色那组深色强调字在深底上不够亮 */
+html[data-theme="dark"] .topic-card { background: var(--card); border-color: #333b49; }
+html[data-theme="dark"] .topic-card.t1 { --tc:#7cb6ff; --tc-bg:rgba(124,182,255,.16); }
+html[data-theme="dark"] .topic-card.t2 { --tc:#b69bff; --tc-bg:rgba(182,155,255,.16); }
+html[data-theme="dark"] .topic-card.t3 { --tc:#4fd1e5; --tc-bg:rgba(79,209,229,.16); }
+html[data-theme="dark"] .topic-card.t4 { --tc:#f5b75c; --tc-bg:rgba(245,183,92,.16); }
+
+/* 页脚 */
+html[data-theme="dark"] #footer { border-top-color: #333b49; }
+html[data-theme="dark"] .footer-bar-links a { color: var(--ink-2); }
