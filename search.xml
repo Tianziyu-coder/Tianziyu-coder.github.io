@@ -1,37 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <search>
   <entry>
-    <title>Docker 部署 Spring Boot 微服务（实战流程）</title>
-    <url>/2026/10/05/docker-deploy-notes/</url>
-    <content><![CDATA[最简 DockerfileFROM eclipse-temurin:17-jreWORKDIR /app# 先拷 jar 再拷配置，利用分层缓存COPY target/*.jar app.jarENV TZ=Asia/ShanghaiENV JAVA_OPTS=&quot;-Xms256m -Xmx256m -Duser.timezone=Asia/Shanghai&quot;EXPOSE 8080ENTRYPOINT [&quot;sh&quot;, &quot;-c&quot;, &quot;java $JAVA_OPTS -jar app.jar&quot;]
-
-
-
-三个容易忽略的点
-时区：容器默认 UTC，日志时间会差 8 小时 → ENV TZ=Asia/Shanghai；
-JVM 堆：容器里不设 -Xmx，JVM 可能按宿主机内存申请，容易 OOM 被杀；
-日志挂载：容器删了日志就没了 → -v /data/logs:/app/logs。
-
-docker-compose 编排services:  mysql:    image: mysql:8.0    environment:      MYSQL_ROOT_PASSWORD: root      TZ: Asia/Shanghai    ports: [&quot;3306:3306&quot;]    volumes: [&quot;mysql-data:/var/lib/mysql&quot;]  redis:    image: redis:7    ports: [&quot;6379:6379&quot;]  travel-note:    build: ./travel-modules/travel-modules-note    depends_on: [mysql, redis]    environment:      SPRING_PROFILES_ACTIVE: dev    ports: [&quot;8081:8081&quot;]volumes:  mysql-data:
-
-docker compose up -d 一把起。
-常用命令docker ps -a                     # 看容器docker logs -f --tail 200 容器名  # 看日志docker compose up -d --build     # 重新构建启动docker stats                     # 资源占用
-
-注意
-微服务之间别写 localhost：容器内 localhost 是它自己，要用 服务名（compose 里自动有 DNS）；
-数据库连接串用 jdbc:mysql://mysql:3306/库名（服务名当主机名）。
-
-]]></content>
-      <categories>
-        <category>项目实战</category>
-      </categories>
-      <tags>
-        <tag>Docker</tag>
-        <tag>部署</tag>
-        <tag>微服务</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>ConcurrentHashMap 为什么线程安全</title>
     <url>/2026/04/25/concurrenthashmap-notes/</url>
     <content><![CDATA[一句话JDK 8 的 ConcurrentHashMap &#x3D; CAS + synchronized 锁单个桶，锁粒度细到”数组里的一个节点”，所以并发度远高于 Hashtable（锁整个表）。
@@ -73,6 +42,79 @@ ConcurrentHashMap 能存 null 吗？不能（key 和 value 都不行），因为
         <tag>Java</tag>
         <tag>并发</tag>
         <tag>集合</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Docker 部署 Spring Boot 微服务（实战流程）</title>
+    <url>/2026/10/05/docker-deploy-notes/</url>
+    <content><![CDATA[最简 DockerfileFROM eclipse-temurin:17-jreWORKDIR /app# 先拷 jar 再拷配置，利用分层缓存COPY target/*.jar app.jarENV TZ=Asia/ShanghaiENV JAVA_OPTS=&quot;-Xms256m -Xmx256m -Duser.timezone=Asia/Shanghai&quot;EXPOSE 8080ENTRYPOINT [&quot;sh&quot;, &quot;-c&quot;, &quot;java $JAVA_OPTS -jar app.jar&quot;]
+
+
+
+三个容易忽略的点
+时区：容器默认 UTC，日志时间会差 8 小时 → ENV TZ=Asia/Shanghai；
+JVM 堆：容器里不设 -Xmx，JVM 可能按宿主机内存申请，容易 OOM 被杀；
+日志挂载：容器删了日志就没了 → -v /data/logs:/app/logs。
+
+docker-compose 编排services:  mysql:    image: mysql:8.0    environment:      MYSQL_ROOT_PASSWORD: root      TZ: Asia/Shanghai    ports: [&quot;3306:3306&quot;]    volumes: [&quot;mysql-data:/var/lib/mysql&quot;]  redis:    image: redis:7    ports: [&quot;6379:6379&quot;]  travel-note:    build: ./travel-modules/travel-modules-note    depends_on: [mysql, redis]    environment:      SPRING_PROFILES_ACTIVE: dev    ports: [&quot;8081:8081&quot;]volumes:  mysql-data:
+
+docker compose up -d 一把起。
+常用命令docker ps -a                     # 看容器docker logs -f --tail 200 容器名  # 看日志docker compose up -d --build     # 重新构建启动docker stats                     # 资源占用
+
+注意
+微服务之间别写 localhost：容器内 localhost 是它自己，要用 服务名（compose 里自动有 DNS）；
+数据库连接串用 jdbc:mysql://mysql:3306/库名（服务名当主机名）。
+
+]]></content>
+      <categories>
+        <category>项目实战</category>
+      </categories>
+      <tags>
+        <tag>Docker</tag>
+        <tag>部署</tag>
+        <tag>微服务</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>微服务网关统一鉴权：JWT + 全局过滤器设计</title>
+    <url>/2026/08/22/gateway-jwt-auth-notes/</url>
+    <content><![CDATA[前端只认一个入口（网关），鉴权也只在网关做一次，下游服务不再重复校验。
+
+
+整体流程前端 ──token──▶ 网关 ──校验JWT──▶ 解析出 userId ──写入请求头──▶ 业务服务
+
+网关侧：全局过滤器@Componentpublic class AuthFilter implements GlobalFilter, Ordered &#123;    private static final List&lt;String&gt; WHITE = List.of(            &quot;/auth/login&quot;, &quot;/auth/register&quot;, &quot;/system/users/register&quot;);    @Override    public Mono&lt;Void&gt; filter(ServerWebExchange exchange, GatewayFilterChain chain) &#123;        ServerHttpRequest request = exchange.getRequest();        String path = request.getURI().getPath();        if (WHITE.stream().anyMatch(path::startsWith)) &#123;            return chain.filter(exchange);        &#125;        String token = request.getHeaders().getFirst(&quot;Authorization&quot;);        if (StringUtils.isBlank(token)) &#123;            return unauthorized(exchange, &quot;未登录&quot;);        &#125;        try &#123;            Claims claims = JwtUtils.parse(token);            // 关键：把身份塞进请求头，下游用 SecurityUtils 取            ServerHttpRequest mutated = request.mutate()                    .header(&quot;user_id&quot;, claims.get(&quot;userId&quot;).toString())                    .header(&quot;username&quot;, claims.get(&quot;username&quot;, String.class))                    .build();            return chain.filter(exchange.mutate().request(mutated).build());        &#125; catch (Exception e) &#123;            return unauthorized(exchange, &quot;token 已失效&quot;);        &#125;    &#125;    @Override    public int getOrder() &#123; return -100; &#125;&#125;
+
+下游取身份Long userId = SecurityUtils.getUserId();   // 从 ThreadLocal 里拿，ThreadLocal 由拦截器从请求头填充
+
+
+原则：下游永远不信前端传的 userId，只信网关注入的请求头。
+
+内部调用（服务之间）网关只处理”外部进来的请求”。服务之间用 Feign 调用时：
+
+请求头带 from-source: inner；
+提供方用 @InnerAuth 校验这个头，不满足直接拒绝。
+
+这样即使有人拿到内网地址，没有 inner 头也调不通。
+三个安全细节
+禁止外部伪造 user_id：网关要先删除请求里的 user_id 头再注入（或直接覆盖），防止前端自己塞；
+token 过期：返回 401，前端跳登录；配合 refresh token 做续期；
+白名单要精确：用 startsWith 时注意 /system/users/1 这类路径别误放行。
+
+面试常问
+为什么不在每个服务里做鉴权？重复、难维护、服务间调用还要传 token；
+无状态 JWT 怎么退出登录？服务端维护黑名单（Redis），或短 token + refresh token；
+网关会成为瓶颈吗？网关做的是轻量校验（验签 + 解析），不查库，可水平扩容。
+
+]]></content>
+      <categories>
+        <category>项目实战</category>
+      </categories>
+      <tags>
+        <tag>微服务</tag>
+        <tag>Spring Cloud</tag>
+        <tag>网关</tag>
+        <tag>JWT</tag>
       </tags>
   </entry>
   <entry>
@@ -526,6 +568,138 @@ Optional、List&lt;T&gt; 这类泛型别当方法参数传 null，返回空集�
       </tags>
   </entry>
   <entry>
+    <title>Stream 与 Optional 实战：好用，但别用错</title>
+    <url>/2025/04/26/java-stream-optional-notes/</url>
+    <content><![CDATA[一句话总结Stream 是不存数据、一次性消费、惰性求值的计算管道；Optional 是给方法返回值表达”可能没有”的容器，不是用来替代所有 null 判断的。两者用对了代码更短，用错了更容易踩坑。
+
+
+一、Stream 的三条基本性质List&lt;String&gt; names = users.stream()        .filter(u -&gt; u.getAge() &gt;= 18)   // 中间操作：只记录，不执行        .map(User::getName)        .distinct()        .sorted()        .collect(Collectors.toList());   // 终端操作：真正触发遍历
+
+
+不存储数据：只持有数据源的引用，结果要靠 collect 收出来；
+惰性：中间操作在终端操作之前不会执行，所以 stream().filter(...) 单独写一行等于什么都没做；
+一次性：终端操作后流已关闭，再次遍历抛 IllegalStateException: stream has already been operated upon or closed。
+
+
+
+
+类型
+常见方法
+
+
+
+中间（返回 Stream）
+filter map flatMap distinct sorted peek limit skip
+
+
+终端（返回结果）
+collect forEach toList count reduce anyMatch allMatch findFirst findAny
+
+
+peek 只在调试时用（且必须接终端操作才会执行），别用它做业务赋值。
+二、Collectors.toMap 的三个坑// 危险写法：key 重复直接抛 IllegalStateException；value 为 null 抛 NPE；顺序不保证Map&lt;Long, String&gt; m = users.stream()        .collect(Collectors.toMap(User::getId, User::getName));// 稳妥写法Map&lt;Long, String&gt; m = users.stream()        .collect(Collectors.toMap(                User::getId,                u -&gt; Optional.ofNullable(u.getName()).orElse(&quot;&quot;),                (oldVal, newVal) -&gt; oldVal,   // 重复 key：保留先出现的                LinkedHashMap::new            // 需要保序时指定容器        ));
+
+
+
+
+坑
+表现
+处理
+
+
+
+重复 key
+IllegalStateException: Duplicate key
+传第三个参数 merge function
+
+
+value 为 null
+NullPointerException
+提前兜底，或改用 HashMap 手动 put
+
+
+顺序
+默认 HashMap 无序
+传第四个参数 LinkedHashMap::new
+
+
+分组也很常用：
+Map&lt;String, List&lt;Order&gt;&gt; byStatus = orders.stream()        .collect(Collectors.groupingBy(Order::getStatus));Map&lt;Boolean, List&lt;Order&gt;&gt; paid = orders.stream()        .collect(Collectors.partitioningBy(o -&gt; o.getStatus() == PAID));
+
+三、parallelStream 不是”加个 parallel 就变快”// 反例：共享可变状态，并发写入 ArrayList 会丢数据甚至抛异常List&lt;Integer&gt; result = new ArrayList&lt;&gt;();IntStream.range(0, 10000).parallel().forEach(result::add);// 正解：用 collect 归约，让框架处理分区与合并List&lt;Integer&gt; result = IntStream.range(0, 10000).parallel()        .boxed().collect(Collectors.toList());
+
+适用判断：
+
+数据源可拆分（ArrayList、IntStream.range 好，LinkedList、IO 流差）；
+任务量大且单个元素处理偏 CPU 密集，小集合的拆分支配&#x2F;合并开销反而更慢；
+无共享可变状态、无顺序依赖、无 IO&#x2F;数据库调用（并行会打满公共 ForkJoinPool，把别的服务拖慢）；
+需要有序结果时别用 forEach（forEachOrdered 会抵消大部分并行收益）。
+
+线上服务里更该谨慎：Web 请求本身已经并发，再套 parallelStream 抢的是同一个公共池。
+四、Optional 的正确用法// 推荐：作为返回值，链式表达&quot;可能没有&quot;public Optional&lt;User&gt; findByEmail(String email) &#123; ... &#125;String displayName = userService.findByEmail(email)        .map(User::getNickname)        .filter(s -&gt; !s.isBlank())        .orElseGet(() -&gt; &quot;用户&quot; + email.substring(0, 3));
+
+orElse 与 orElseGet 的区别是高频题：
+Optional&lt;User&gt; opt = Optional.of(user);opt.orElse(loadFromDb());       // loadFromDb() 一定执行，哪怕 opt 有值opt.orElseGet(() -&gt; loadFromDb()); // 只有为空时才执行
+
+orElse 的参数是先求值再传进去的，如果里面是远程调用&#x2F;查库，代价很实在。
+
+
+
+不要用
+原因
+
+
+
+Optional.get() 不先判断
+空值时抛 NoSuchElementException，等于换了个 NPE
+
+
+字段&#x2F;参数声明成 Optional
+设计意图是返回值；字段用它会让序列化、JPA 映射变得麻烦
+
+
+Optional.of(null)
+直接 NPE，应为 ofNullable
+
+
+if (opt != null)
+Optional 本身不该为 null，返回空用 Optional.empty()
+
+
+Optional 里套 Optional
+用 flatMap 拍平
+
+
+五、性能与可读性Stream 有 lambda、装箱、函数对象等开销，几十个元素的简单循环里手写 for 通常更快，但差距在微基准之外基本可以忽略。取舍标准是可读性：多步过滤&#x2F;映射&#x2F;分组用 Stream 明显更清晰；带 break、多重下标、需要修改外部状态的逻辑用循环更直接。
+两个容易忽略的点：
+// 无限流必须配 limit，否则终端操作不会结束Stream.iterate(0, i -&gt; i + 1).limit(10).forEach(System.out::println);// 流中修改源集合会触发 ConcurrentModificationException（或结果不确定）users.stream().filter(...).forEach(u -&gt; users.remove(u));  // 禁止
+
+六、面试怎么答
+什么是惰性求值？ → 中间操作只构建管道，终端操作才触发遍历；好处是可以做短路（findFirst、anyMatch）和循环融合，避免多次遍历。
+findFirst 和 findAny 区别？ → 前者保证按 encounter order 返回第一个，后者在并行流里可返回任意一个以换取性能；串行流下通常结果一样，但不要依赖。
+reduce 与 collect 区别？ → reduce 把元素归约成一个不可变结果（如求和），collect 用可变容器累加，适合收集成集合&#x2F;Map。
+orElse 和 orElseGet？ → 前者参数无论是否为空都会求值，后者惰性。
+
+七、踩坑清单
+Stream 别存成字段反复用，用完即弃；
+Collectors.toMap 一律显式处理重复 key；
+parallelStream 里别碰共享集合、别查数据库；
+map 返回 null 会让后续 collect 或 toMap 炸掉，先 filter(Objects::nonNull)；
+基本类型流用 IntStream &#x2F; LongStream 避免装箱，sum() 比 reduce(0, Integer::sum) 更直白；
+Optional 不要用在 DTO&#x2F;JSON 序列化上，Jackson 需要额外模块才能正确处理。
+
+]]></content>
+      <categories>
+        <category>Java基础</category>
+      </categories>
+      <tags>
+        <tag>Java</tag>
+        <tag>面试</tag>
+        <tag>Stream</tag>
+        <tag>Optional</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>JMM、volatile 与 synchronized：可见性、原子性、有序性</title>
     <url>/2025/06/28/java-jmm-volatile-synchronized/</url>
     <content><![CDATA[一句话总结并发三问题：可见性（缓存&#x2F;工作内存）、原子性（复合操作被打断）、有序性（指令重排序）。volatile 解决可见性与有序性但不保证原子性；synchronized 三个都解决，代价是互斥。
@@ -672,125 +846,116 @@ volatile 数组同理，只保证数组引用可见，元素读写要用 AtomicR
       </tags>
   </entry>
   <entry>
-    <title>Stream 与 Optional 实战：好用，但别用错</title>
-    <url>/2025/04/26/java-stream-optional-notes/</url>
-    <content><![CDATA[一句话总结Stream 是不存数据、一次性消费、惰性求值的计算管道；Optional 是给方法返回值表达”可能没有”的容器，不是用来替代所有 null 判断的。两者用对了代码更短，用错了更容易踩坑。
+    <title>String、字符串常量池与 StringBuilder：一篇讲透</title>
+    <url>/2025/02/18/java-string-pool-notes/</url>
+    <content><![CDATA[一句话总结String 是不可变的 final 类；字面量进字符串常量池复用，new String(...) 一定在堆上新建对象；JDK 9 之后底层从 char[] 换成 byte[] + coder；循环拼接必须用 StringBuilder。
 
 
-一、Stream 的三条基本性质List&lt;String&gt; names = users.stream()        .filter(u -&gt; u.getAge() &gt;= 18)   // 中间操作：只记录，不执行        .map(User::getName)        .distinct()        .sorted()        .collect(Collectors.toList());   // 终端操作：真正触发遍历
+一、String 为什么不可变// JDK 17 的 java.lang.String（节选）public final class String implements ... &#123;    private final byte[] value;   // JDK 8 及之前是 char[]    private final byte coder;     // LATIN1(0) / UTF16(1)    private int hash;             // 缓存 hashCode，默认 0&#125;
 
-
-不存储数据：只持有数据源的引用，结果要靠 collect 收出来；
-惰性：中间操作在终端操作之前不会执行，所以 stream().filter(...) 单独写一行等于什么都没做；
-一次性：终端操作后流已关闭，再次遍历抛 IllegalStateException: stream has already been operated upon or closed。
-
+三点保证：类 final 不能被继承改写、内部数组 private final 且不外泄、没有提供任何修改 value 的方法。连 substring &#x2F; replace 都是返回新对象。
+不可变带来的好处：
 
 
 
-类型
-常见方法
+好处
+说明
 
 
 
-中间（返回 Stream）
-filter map flatMap distinct sorted peek limit skip
+线程安全
+无需同步就能在多线程间共享
 
 
-终端（返回结果）
-collect forEach toList count reduce anyMatch allMatch findFirst findAny
+可缓存 hash
+hashCode() 只算一次，所以适合做 HashMap 的 key
 
 
-peek 只在调试时用（且必须接终端操作才会执行），别用它做业务赋值。
-二、Collectors.toMap 的三个坑// 危险写法：key 重复直接抛 IllegalStateException；value 为 null 抛 NPE；顺序不保证Map&lt;Long, String&gt; m = users.stream()        .collect(Collectors.toMap(User::getId, User::getName));// 稳妥写法Map&lt;Long, String&gt; m = users.stream()        .collect(Collectors.toMap(                User::getId,                u -&gt; Optional.ofNullable(u.getName()).orElse(&quot;&quot;),                (oldVal, newVal) -&gt; oldVal,   // 重复 key：保留先出现的                LinkedHashMap::new            // 需要保序时指定容器        ));
+常量池复用
+相同字面量指向同一对象，省内存
 
 
-
-
-坑
-表现
-处理
+安全
+类加载名、URL、数据库用户名传进去不会被中途改动
 
 
 
-重复 key
-IllegalStateException: Duplicate key
-传第三个参数 merge function
+反射确实能改 value，但那属于破坏封装，模块化 JDK 下还要 --add-opens，面试别拿这个当”String 可变”的论据。
 
+二、常量池：== 到底比什么String a = &quot;abc&quot;;String b = &quot;abc&quot;;String c = new String(&quot;abc&quot;);String d = c.intern();System.out.println(a == b); // true  —— 都指向常量池同一个对象System.out.println(a == c); // false —— c 是堆上的新对象System.out.println(a == d); // true  —— intern 返回池中的引用System.out.println(a.equals(c)); // true —— 比的是内容
 
-value 为 null
-NullPointerException
-提前兜底，或改用 HashMap 手动 put
-
-
-顺序
-默认 HashMap 无序
-传第四个参数 LinkedHashMap::new
-
-
-分组也很常用：
-Map&lt;String, List&lt;Order&gt;&gt; byStatus = orders.stream()        .collect(Collectors.groupingBy(Order::getStatus));Map&lt;Boolean, List&lt;Order&gt;&gt; paid = orders.stream()        .collect(Collectors.partitioningBy(o -&gt; o.getStatus() == PAID));
-
-三、parallelStream 不是”加个 parallel 就变快”// 反例：共享可变状态，并发写入 ArrayList 会丢数据甚至抛异常List&lt;Integer&gt; result = new ArrayList&lt;&gt;();IntStream.range(0, 10000).parallel().forEach(result::add);// 正解：用 collect 归约，让框架处理分区与合并List&lt;Integer&gt; result = IntStream.range(0, 10000).parallel()        .boxed().collect(Collectors.toList());
-
-适用判断：
-
-数据源可拆分（ArrayList、IntStream.range 好，LinkedList、IO 流差）；
-任务量大且单个元素处理偏 CPU 密集，小集合的拆分支配&#x2F;合并开销反而更慢；
-无共享可变状态、无顺序依赖、无 IO&#x2F;数据库调用（并行会打满公共 ForkJoinPool，把别的服务拖慢）；
-需要有序结果时别用 forEach（forEachOrdered 会抵消大部分并行收益）。
-
-线上服务里更该谨慎：Web 请求本身已经并发，再套 parallelStream 抢的是同一个公共池。
-四、Optional 的正确用法// 推荐：作为返回值，链式表达&quot;可能没有&quot;public Optional&lt;User&gt; findByEmail(String email) &#123; ... &#125;String displayName = userService.findByEmail(email)        .map(User::getNickname)        .filter(s -&gt; !s.isBlank())        .orElseGet(() -&gt; &quot;用户&quot; + email.substring(0, 3));
-
-orElse 与 orElseGet 的区别是高频题：
-Optional&lt;User&gt; opt = Optional.of(user);opt.orElse(loadFromDb());       // loadFromDb() 一定执行，哪怕 opt 有值opt.orElseGet(() -&gt; loadFromDb()); // 只有为空时才执行
-
-orElse 的参数是先求值再传进去的，如果里面是远程调用&#x2F;查库，代价很实在。
+new String(&quot;abc&quot;) 创建了几个对象？两个（如果池里还没有 &quot;abc&quot;）：字面量触发入池一个对象，new 再在堆上创建一个；如果池里已有，就只有堆上那一个。
+常量池位置的演进是常考点：
 
 
 
-不要用
-原因
+JDK
+字符串常量池位置
+关键变化
 
 
 
-Optional.get() 不先判断
-空值时抛 NoSuchElementException，等于换了个 NPE
+6
+方法区（永久代）
+intern() 会把字符串复制一份到永久代
 
 
-字段&#x2F;参数声明成 Optional
-设计意图是返回值；字段用它会让序列化、JPA 映射变得麻烦
+7
+堆
+intern() 改为记录堆中首次出现的引用，不再复制
 
 
-Optional.of(null)
-直接 NPE，应为 ofNullable
+8 及以后
+堆
+永久代被元空间取代，但字符串常量池仍在堆里
 
 
-if (opt != null)
-Optional 本身不该为 null，返回空用 Optional.empty()
+JDK 7 这个改动直接影响一道经典题：先 new String 再 intern()，JDK 6 下 == 为 false（两个不同对象），JDK 7+ 为 true（池里存的就是堆对象引用）。
+三、编译期优化与拼接String s1 = &quot;a&quot; + &quot;b&quot;;              // 编译期常量折叠，等价于 &quot;ab&quot;String s2 = &quot;ab&quot;;System.out.println(s1 == s2);       // trueString x = &quot;a&quot;;String s3 = x + &quot;b&quot;;                // 有变量参与，编译期无法确定System.out.println(s3 == s2);       // false
+
+JDK 8 把变量拼接编译成 new StringBuilder().append(...).toString()；JDK 9 之后改用 invokedynamic + StringConcatFactory，避免每次都生成固定的 StringBuilder 字节码，为后续优化留空间。
+真正的坑在循环里：
+// 反例：每次迭代都新建 StringBuilder 和 String，O(n²) 级别的拷贝String s = &quot;&quot;;for (int i = 0; i &lt; 10000; i++) &#123;    s += i;&#125;// 正解：预估容量，避免扩容时反复 Arrays.copyOfStringBuilder sb = new StringBuilder(16 * 10000);for (int i = 0; i &lt; 10000; i++) &#123;    sb.append(i);&#125;String s = sb.toString();
 
 
-Optional 里套 Optional
-用 flatMap 拍平
 
 
-五、性能与可读性Stream 有 lambda、装箱、函数对象等开销，几十个元素的简单循环里手写 for 通常更快，但差距在微基准之外基本可以忽略。取舍标准是可读性：多步过滤&#x2F;映射&#x2F;分组用 Stream 明显更清晰；带 break、多重下标、需要修改外部状态的逻辑用循环更直接。
-两个容易忽略的点：
-// 无限流必须配 limit，否则终端操作不会结束Stream.iterate(0, i -&gt; i + 1).limit(10).forEach(System.out::println);// 流中修改源集合会触发 ConcurrentModificationException（或结果不确定）users.stream().filter(...).forEach(u -&gt; users.remove(u));  // 禁止
 
-六、面试怎么答
-什么是惰性求值？ → 中间操作只构建管道，终端操作才触发遍历；好处是可以做短路（findFirst、anyMatch）和循环融合，避免多次遍历。
-findFirst 和 findAny 区别？ → 前者保证按 encounter order 返回第一个，后者在并行流里可返回任意一个以换取性能；串行流下通常结果一样，但不要依赖。
-reduce 与 collect 区别？ → reduce 把元素归约成一个不可变结果（如求和），collect 用可变容器累加，适合收集成集合&#x2F;Map。
-orElse 和 orElseGet？ → 前者参数无论是否为空都会求值，后者惰性。
+StringBuilder
+StringBuffer
 
-七、踩坑清单
-Stream 别存成字段反复用，用完即弃；
-Collectors.toMap 一律显式处理重复 key；
-parallelStream 里别碰共享集合、别查数据库；
-map 返回 null 会让后续 collect 或 toMap 炸掉，先 filter(Objects::nonNull)；
-基本类型流用 IntStream &#x2F; LongStream 避免装箱，sum() 比 reduce(0, Integer::sum) 更直白；
-Optional 不要用在 DTO&#x2F;JSON 序列化上，Jackson 需要额外模块才能正确处理。
+
+
+线程安全
+否
+是（方法加 synchronized）
+
+
+性能
+更高
+略低
+
+
+适用场景
+方法内局部拼接（绝大多数）
+确实存在多线程共享写入时才用
+
+
+单线程局部变量的拼接用 StringBuffer 属于无意义加锁，看到就该改掉。
+四、JDK 9 的紧凑字符串JDK 8 的 char[] 每个字符固定 2 字节。JDK 9 起改成 byte[] + coder：内容全是 Latin-1 就用 1 字节&#x2F;字符，含中文等再用 UTF-16 的 2 字节。纯英文&#x2F;数字为主的场景能省近一半堆内存——这对大量缓存 key、日志字符串的服务很实在。String 的公开 API 完全没变，所以业务代码无感。
+五、面试怎么答
+String 为什么设计成不可变？ → 线程安全、可缓存 hash（适合做 HashMap key）、常量池复用、作为参数传递不会被篡改。
+== 与 equals 区别？ → == 比引用（基本类型比值），equals 被 String 重写为逐字符比内容。比较字符串内容一律用 equals。
+StringBuilder 为什么比 + 快？ → + 在循环里每次生成新对象；StringBuilder 在可扩容数组上原地 append。补一句 JDK 9 的 invokedynamic，能显出版本意识。
+intern() 有什么用、有什么风险？ → 把字符串纳入池复用，适合大量重复值（如省市名）省内存；但池在堆里、受 GC 管理，滥用会让大量长生命周期引用滞留，且调用本身有哈希表开销。
+
+六、踩坑清单
+null 参与 + 拼接会得到字符串 &quot;null&quot;，不会抛异常，容易把脏数据写进库；
+常量调 equals：&quot;ACTIVE&quot;.equals(status)，别写成 status.equals(&quot;ACTIVE&quot;)；
+split 参数是正则，按点分割要写 str.split(&quot;\\.&quot;)；
+String 不可变，密码这类敏感内容用完无法清零，安全场景用 char[] 并主动 Arrays.fill；
+substring 在 JDK 6 会共享原 char[] 导致大字符串无法回收，JDK 7+ 已改为复制，属于历史问题，别再当成现行结论；
+别用 new String(bytes) 不指定字符集，平台默认编码不一致会乱码，统一 StandardCharsets.UTF_8。
 
 ]]></content>
       <categories>
@@ -799,105 +964,159 @@ Optional 不要用在 DTO&#x2F;JSON 序列化上，Jackson 需要额外模块才
       <tags>
         <tag>Java</tag>
         <tag>面试</tag>
-        <tag>Stream</tag>
-        <tag>Optional</tag>
+        <tag>String</tag>
       </tags>
   </entry>
   <entry>
-    <title>JVM 内存结构与垃圾回收：一次讲清楚</title>
-    <url>/2026/04/11/jvm-memory-gc-notes/</url>
-    <content><![CDATA[运行时数据区
-
-
-区域
-线程
-说明
+    <title>Java 线程池：七个参数与执行流程（面试必背）</title>
+    <url>/2026/03/28/java-threadpool-notes/</url>
+    <content><![CDATA[七个核心参数new ThreadPoolExecutor(    corePoolSize,      // 核心线程数（常驻）    maximumPoolSize,   // 最大线程数    keepAliveTime,     // 非核心线程空闲存活时间    TimeUnit.SECONDS,    workQueue,         // 阻塞队列    threadFactory,     // 线程工厂（命名方便排查）    handler            // 拒绝策略);
 
 
 
-程序计数器
-私有
-当前字节码行号，唯一不会 OOM 的区域
+执行流程（背这段就够）
+线程数 &lt; corePoolSize → 新建核心线程执行；
+线程数 ≥ 核心数 → 进队列排队；
+队列满了 → 线程数 &lt; maximumPoolSize → 新建非核心线程；
+队列满 + 线程数到上限 → 触发拒绝策略。
 
 
-虚拟机栈
-私有
-每个方法一个栈帧（局部变量表、操作数栈）
+口诀：核心 → 队列 → 扩容 → 拒绝。注意是”先排队再扩容”，不是”先扩容”。
+
+四种拒绝策略
 
 
-本地方法栈
-私有
-native 方法
-
-
-堆
-共享
-对象实例，GC 主战场
-
-
-方法区（元空间）
-共享
-类元信息、常量、静态变量，JDK 8 后移出堆
+策略
+行为
 
 
 
-
-对象怎么判死可达性分析：从 GC Roots 出发，不可达即可回收。
-GC Roots 包括：虚拟机栈中的引用、方法区静态属性、常量引用、JNI 引用、活跃线程。
-
-为什么不只用引用计数？解决不了循环引用。
-
-分代与回收算法
-新生代（Eden : S0 : S1 &#x3D; 8 : 1 : 1）：对象优先在 Eden 分配，复制算法，存活对象少、复制成本低；
-老年代：大对象、长期存活对象，标记-清除 &#x2F; 标记-整理。
-
-对象晋升老年代的条件：
-
-年龄达到阈值（默认 15，-XX:MaxTenuringThreshold）；
-大对象直接进老年代（-XX:PretenureSizeThreshold）；
-动态年龄判断：Survivor 中同龄对象总和 &gt; 一半，年龄 ≥ 该年龄的直接晋升。
-
-常见收集器
+AbortPolicy（默认）
+抛 RejectedExecutionException
 
 
-收集器
-特点
+CallerRunsPolicy
+由提交任务的线程自己执行（降速）
 
 
-
-Serial &#x2F; Serial Old
-单线程，客户端模式
-
-
-ParNew &#x2F; Parallel Scavenge
-多线程，关注吞吐量
+DiscardPolicy
+静默丢弃
 
 
-CMS
-并发标记清除，低停顿，有碎片
+DiscardOldestPolicy
+丢掉队列里最老的任务，再尝试提交
 
 
-G1
-分 Region，可预测停顿，JDK 9+ 默认
+为什么不用 Executors 创建阿里规约明确禁止：Executors.newFixedThreadPool 用的 LinkedBlockingQueue 容量是 Integer.MAX_VALUE，任务堆积会导致 OOM；newCachedThreadPool 最大线程数是 Integer.MAX_VALUE，线程爆炸。所以必须手动 new ThreadPoolExecutor。
+参数怎么定
+CPU 密集型：核心数 = CPU 核数 + 1
+IO 密集型：核心数 = CPU 核数 × 2（或更大，取决于阻塞比例）
+队列必须有界（ArrayBlockingQueue 或指定容量的 LinkedBlockingQueue）
+线程工厂里给线程起名字，出问题时 jstack 一眼看出来
 
+面试延伸
+线程池状态：RUNNING / SHUTDOWN / STOP / TIDYING / TERMINATED；
+shutdown() 不再接新任务、等已提交的跑完；shutdownNow() 中断线程、返回未执行任务；
+核心线程默认也会回收（allowCoreThreadTimeOut(true) 可以打开）。
 
-ZGC
-超低停顿（&lt; 10ms），大堆场景
-
-
-常用参数-Xms512m -Xmx512m          # 初始/最大堆，线上建议相等，避免动态扩容-Xmn256m                   # 新生代大小-XX:MetaspaceSize=128m     # 元空间初始大小-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/logs   # OOM 时自动 dump
-
-排查套路jps -l                      # 找进程jstat -gcutil &lt;pid&gt; 1000    # 每秒看 GC 情况jmap -heap &lt;pid&gt;            # 堆使用jstack &lt;pid&gt; &gt; t.txt        # 线程快照，查死锁/阻塞
-
-面试常问：为什么新生代用复制算法？（存活对象少，复制成本低，且没有内存碎片）
 ]]></content>
       <categories>
         <category>Java基础</category>
       </categories>
       <tags>
+        <tag>Java</tag>
+        <tag>并发</tag>
         <tag>面试</tag>
-        <tag>JVM</tag>
-        <tag>垃圾回收</tag>
+        <tag>线程池</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>ThreadLocal 原理、内存泄漏与异步场景下的上下文传递</title>
+    <url>/2025/08/16/java-threadlocal-notes/</url>
+    <content><![CDATA[一句话总结ThreadLocal 不是”给变量加线程安全”，而是每个线程持有自己的一份副本。它的存储挂在 Thread 对象上的 ThreadLocalMap 里；key 是弱引用，value 是强引用，线程池场景下不 remove() 就会内存泄漏并串数据。
+
+
+一、它到底存在哪// JDK 源码结构（简化）class Thread &#123;    ThreadLocal.ThreadLocalMap threadLocals = null;      // 普通 ThreadLocal 的数据    ThreadLocal.ThreadLocalMap inheritableThreadLocals = null;&#125;static class ThreadLocalMap &#123;    static class Entry extends WeakReference&lt;ThreadLocal&lt;?&gt;&gt; &#123;        Object value;        // 强引用        Entry(ThreadLocal&lt;?&gt; k, Object v) &#123; super(k); value = v; &#125;    &#125;&#125;
+
+关键：数据不在 ThreadLocal 对象里，而在线程自己的 Map 里，以 ThreadLocal 实例为 key。所以：
+
+一个 ThreadLocal 变量在不同线程里对应不同 value；
+线程结束，Map 随之可回收；
+线程不结束（线程池复用），value 会一直留在这个线程上。
+
+private static final ThreadLocal&lt;UserContext&gt; CTX = new ThreadLocal&lt;&gt;();public void handle(Request req) &#123;    try &#123;        CTX.set(parseUser(req));    // 绑定当前线程        doBiz();                    // 后续任意层级都能 CTX.get()    &#125; finally &#123;        CTX.remove();               // 必须！    &#125;&#125;
+
+二、为什么弱引用还会内存泄漏Thread(强) → ThreadLocalMap → Entry → value(强)                                ↘ key(弱引用) → ThreadLocal 实例
+
+如果 ThreadLocal 实例失去了外部强引用（比如局部 new 出来用完了），GC 会回收它，Entry 的 key 变成 null，但 value 仍被 Entry 强引用着，而 Entry 又被长期存活的线程池线程引用。于是 value 永远取不到、也回收不掉——这就是所谓的泄漏。
+ThreadLocalMap 在 get/set/remove 时会顺路清理 key 为 null 的陈旧 Entry（expungeStaleEntry），但这是被动触发：如果之后这个线程再不碰 ThreadLocal，清理就不会发生。
+所以正确姿势只有一条：用完 remove()，放在 finally 里。
+
+面试常问”key 为什么设计成弱引用”：这是为了在 ThreadLocal 本身已无用时至少让 key 能被回收、给 Map 一个发现”这个 entry 已废弃”的机会；它并不能自动回收 value，所以仍要手动 remove。
+
+三、典型用途
+
+
+场景
+怎么用
+
+
+
+登录用户上下文
+拦截器 set，finally remove，Service 层随处 get
+
+
+链路追踪 traceId
+日志 MDC 底层就是 ThreadLocal
+
+
+事务 &#x2F; 连接绑定
+Spring TransactionSynchronizationManager 把 Connection 绑到线程
+
+
+分页参数透传
+PageHelper 用 ThreadLocal 存 page 信息
+
+
+非线程安全对象复用
+SimpleDateFormat 每线程一份
+
+
+private static final ThreadLocal&lt;SimpleDateFormat&gt; FMT =        ThreadLocal.withInitial(() -&gt; new SimpleDateFormat(&quot;yyyy-MM-dd&quot;));// withInitial 只是第一次 get() 时懒初始化，不等于自动清理
+
+Spring 的 RequestContextHolder、SecurityContextHolder 也都基于它，所以异步线程里拿不到登录用户是同一个原因，不是框架 bug。
+四、父子线程与线程池InheritableThreadLocal 在创建子线程时把父线程的 Map 复制一份，能实现一次性传递。但线程池里线程是复用的：
+
+线程早就创建好了，不会再走”创建时复制”；
+上一个任务遗留的 value 可能被下一个任务读到，造成数据串味（用户 A 的上下文被用户 B 的请求看到）。
+
+解决思路：
+// 异步前显式捕获，异步内显式恢复，并清理UserContext ctx = CTX.get();executor.submit(() -&gt; &#123;    try &#123;        CTX.set(ctx);        doAsyncBiz();    &#125; finally &#123;        CTX.remove();    &#125;&#125;);
+
+生产项目更常用阿里的 TransmittableThreadLocal（TTL），包装线程池后由框架负责捕获&#x2F;回放&#x2F;恢复。CompletableFuture、 @Async、MQ 消费者线程都要按这个思路处理。
+五、面试怎么答
+ThreadLocal 原理？ → 每个 Thread 持有 ThreadLocalMap，以 ThreadLocal 弱引用为 key 存 value；get&#x2F;set 操作的是当前线程的 Map，因此天然线程隔离。
+为什么会内存泄漏？ → 线程池线程长期存活，key 被 GC 后 value 仍被强引用且无法访问；被动清理不保证及时，必须 remove。
+ThreadLocal 和 synchronized 区别？ → 前者用”各存一份”避免共享，空间换时间；后者用”同一时刻只让一个线程访问”串行化，时间换空间。
+异步怎么传上下文？ → InheritableThreadLocal 在线程池下失效，需显式传递 + 清理，或用 TTL。
+
+六、踩坑清单
+remove() 一定放 finally，业务抛异常也不能漏；
+别把大对象、集合、Connection 长期挂在 ThreadLocal 上；
+static final 声明 ThreadLocal 实例，避免每次 new 导致 key 不同；
+拦截器&#x2F;Filter 里 set 了，就必须有对应的清理点，别只依赖框架；
+用 ThreadLocal.withInitial 时别以为它会替你回收；
+子线程、@Async、定时任务、MQ 消费者里默认没有 Web 请求的上下文，取不到值先查这条链路，别急着加全局静态变量。
+
+]]></content>
+      <categories>
+        <category>Java基础</category>
+      </categories>
+      <tags>
+        <tag>Java</tag>
+        <tag>并发</tag>
+        <tag>面试</tag>
+        <tag>ThreadLocal</tag>
       </tags>
   </entry>
   <entry>
@@ -1042,256 +1261,100 @@ static final 常量被编译期内联，改了常量值却只重发一个 jar，
       </tags>
   </entry>
   <entry>
-    <title>ThreadLocal 原理、内存泄漏与异步场景下的上下文传递</title>
-    <url>/2025/08/16/java-threadlocal-notes/</url>
-    <content><![CDATA[一句话总结ThreadLocal 不是”给变量加线程安全”，而是每个线程持有自己的一份副本。它的存储挂在 Thread 对象上的 ThreadLocalMap 里；key 是弱引用，value 是强引用，线程池场景下不 remove() 就会内存泄漏并串数据。
+    <title>JVM 内存结构与垃圾回收：一次讲清楚</title>
+    <url>/2026/04/11/jvm-memory-gc-notes/</url>
+    <content><![CDATA[运行时数据区
 
 
-一、它到底存在哪// JDK 源码结构（简化）class Thread &#123;    ThreadLocal.ThreadLocalMap threadLocals = null;      // 普通 ThreadLocal 的数据    ThreadLocal.ThreadLocalMap inheritableThreadLocals = null;&#125;static class ThreadLocalMap &#123;    static class Entry extends WeakReference&lt;ThreadLocal&lt;?&gt;&gt; &#123;        Object value;        // 强引用        Entry(ThreadLocal&lt;?&gt; k, Object v) &#123; super(k); value = v; &#125;    &#125;&#125;
-
-关键：数据不在 ThreadLocal 对象里，而在线程自己的 Map 里，以 ThreadLocal 实例为 key。所以：
-
-一个 ThreadLocal 变量在不同线程里对应不同 value；
-线程结束，Map 随之可回收；
-线程不结束（线程池复用），value 会一直留在这个线程上。
-
-private static final ThreadLocal&lt;UserContext&gt; CTX = new ThreadLocal&lt;&gt;();public void handle(Request req) &#123;    try &#123;        CTX.set(parseUser(req));    // 绑定当前线程        doBiz();                    // 后续任意层级都能 CTX.get()    &#125; finally &#123;        CTX.remove();               // 必须！    &#125;&#125;
-
-二、为什么弱引用还会内存泄漏Thread(强) → ThreadLocalMap → Entry → value(强)                                ↘ key(弱引用) → ThreadLocal 实例
-
-如果 ThreadLocal 实例失去了外部强引用（比如局部 new 出来用完了），GC 会回收它，Entry 的 key 变成 null，但 value 仍被 Entry 强引用着，而 Entry 又被长期存活的线程池线程引用。于是 value 永远取不到、也回收不掉——这就是所谓的泄漏。
-ThreadLocalMap 在 get/set/remove 时会顺路清理 key 为 null 的陈旧 Entry（expungeStaleEntry），但这是被动触发：如果之后这个线程再不碰 ThreadLocal，清理就不会发生。
-所以正确姿势只有一条：用完 remove()，放在 finally 里。
-
-面试常问”key 为什么设计成弱引用”：这是为了在 ThreadLocal 本身已无用时至少让 key 能被回收、给 Map 一个发现”这个 entry 已废弃”的机会；它并不能自动回收 value，所以仍要手动 remove。
-
-三、典型用途
-
-
-场景
-怎么用
-
-
-
-登录用户上下文
-拦截器 set，finally remove，Service 层随处 get
-
-
-链路追踪 traceId
-日志 MDC 底层就是 ThreadLocal
-
-
-事务 &#x2F; 连接绑定
-Spring TransactionSynchronizationManager 把 Connection 绑到线程
-
-
-分页参数透传
-PageHelper 用 ThreadLocal 存 page 信息
-
-
-非线程安全对象复用
-SimpleDateFormat 每线程一份
-
-
-private static final ThreadLocal&lt;SimpleDateFormat&gt; FMT =        ThreadLocal.withInitial(() -&gt; new SimpleDateFormat(&quot;yyyy-MM-dd&quot;));// withInitial 只是第一次 get() 时懒初始化，不等于自动清理
-
-Spring 的 RequestContextHolder、SecurityContextHolder 也都基于它，所以异步线程里拿不到登录用户是同一个原因，不是框架 bug。
-四、父子线程与线程池InheritableThreadLocal 在创建子线程时把父线程的 Map 复制一份，能实现一次性传递。但线程池里线程是复用的：
-
-线程早就创建好了，不会再走”创建时复制”；
-上一个任务遗留的 value 可能被下一个任务读到，造成数据串味（用户 A 的上下文被用户 B 的请求看到）。
-
-解决思路：
-// 异步前显式捕获，异步内显式恢复，并清理UserContext ctx = CTX.get();executor.submit(() -&gt; &#123;    try &#123;        CTX.set(ctx);        doAsyncBiz();    &#125; finally &#123;        CTX.remove();    &#125;&#125;);
-
-生产项目更常用阿里的 TransmittableThreadLocal（TTL），包装线程池后由框架负责捕获&#x2F;回放&#x2F;恢复。CompletableFuture、 @Async、MQ 消费者线程都要按这个思路处理。
-五、面试怎么答
-ThreadLocal 原理？ → 每个 Thread 持有 ThreadLocalMap，以 ThreadLocal 弱引用为 key 存 value；get&#x2F;set 操作的是当前线程的 Map，因此天然线程隔离。
-为什么会内存泄漏？ → 线程池线程长期存活，key 被 GC 后 value 仍被强引用且无法访问；被动清理不保证及时，必须 remove。
-ThreadLocal 和 synchronized 区别？ → 前者用”各存一份”避免共享，空间换时间；后者用”同一时刻只让一个线程访问”串行化，时间换空间。
-异步怎么传上下文？ → InheritableThreadLocal 在线程池下失效，需显式传递 + 清理，或用 TTL。
-
-六、踩坑清单
-remove() 一定放 finally，业务抛异常也不能漏；
-别把大对象、集合、Connection 长期挂在 ThreadLocal 上；
-static final 声明 ThreadLocal 实例，避免每次 new 导致 key 不同；
-拦截器&#x2F;Filter 里 set 了，就必须有对应的清理点，别只依赖框架；
-用 ThreadLocal.withInitial 时别以为它会替你回收；
-子线程、@Async、定时任务、MQ 消费者里默认没有 Web 请求的上下文，取不到值先查这条链路，别急着加全局静态变量。
-
-]]></content>
-      <categories>
-        <category>Java基础</category>
-      </categories>
-      <tags>
-        <tag>Java</tag>
-        <tag>并发</tag>
-        <tag>面试</tag>
-        <tag>ThreadLocal</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>String、字符串常量池与 StringBuilder：一篇讲透</title>
-    <url>/2025/02/18/java-string-pool-notes/</url>
-    <content><![CDATA[一句话总结String 是不可变的 final 类；字面量进字符串常量池复用，new String(...) 一定在堆上新建对象；JDK 9 之后底层从 char[] 换成 byte[] + coder；循环拼接必须用 StringBuilder。
-
-
-一、String 为什么不可变// JDK 17 的 java.lang.String（节选）public final class String implements ... &#123;    private final byte[] value;   // JDK 8 及之前是 char[]    private final byte coder;     // LATIN1(0) / UTF16(1)    private int hash;             // 缓存 hashCode，默认 0&#125;
-
-三点保证：类 final 不能被继承改写、内部数组 private final 且不外泄、没有提供任何修改 value 的方法。连 substring &#x2F; replace 都是返回新对象。
-不可变带来的好处：
-
-
-
-好处
+区域
+线程
 说明
 
 
 
-线程安全
-无需同步就能在多线程间共享
+程序计数器
+私有
+当前字节码行号，唯一不会 OOM 的区域
 
 
-可缓存 hash
-hashCode() 只算一次，所以适合做 HashMap 的 key
+虚拟机栈
+私有
+每个方法一个栈帧（局部变量表、操作数栈）
 
 
-常量池复用
-相同字面量指向同一对象，省内存
+本地方法栈
+私有
+native 方法
 
 
-安全
-类加载名、URL、数据库用户名传进去不会被中途改动
-
-
-
-反射确实能改 value，但那属于破坏封装，模块化 JDK 下还要 --add-opens，面试别拿这个当”String 可变”的论据。
-
-二、常量池：== 到底比什么String a = &quot;abc&quot;;String b = &quot;abc&quot;;String c = new String(&quot;abc&quot;);String d = c.intern();System.out.println(a == b); // true  —— 都指向常量池同一个对象System.out.println(a == c); // false —— c 是堆上的新对象System.out.println(a == d); // true  —— intern 返回池中的引用System.out.println(a.equals(c)); // true —— 比的是内容
-
-new String(&quot;abc&quot;) 创建了几个对象？两个（如果池里还没有 &quot;abc&quot;）：字面量触发入池一个对象，new 再在堆上创建一个；如果池里已有，就只有堆上那一个。
-常量池位置的演进是常考点：
-
-
-
-JDK
-字符串常量池位置
-关键变化
-
-
-
-6
-方法区（永久代）
-intern() 会把字符串复制一份到永久代
-
-
-7
 堆
-intern() 改为记录堆中首次出现的引用，不再复制
+共享
+对象实例，GC 主战场
 
 
-8 及以后
-堆
-永久代被元空间取代，但字符串常量池仍在堆里
-
-
-JDK 7 这个改动直接影响一道经典题：先 new String 再 intern()，JDK 6 下 == 为 false（两个不同对象），JDK 7+ 为 true（池里存的就是堆对象引用）。
-三、编译期优化与拼接String s1 = &quot;a&quot; + &quot;b&quot;;              // 编译期常量折叠，等价于 &quot;ab&quot;String s2 = &quot;ab&quot;;System.out.println(s1 == s2);       // trueString x = &quot;a&quot;;String s3 = x + &quot;b&quot;;                // 有变量参与，编译期无法确定System.out.println(s3 == s2);       // false
-
-JDK 8 把变量拼接编译成 new StringBuilder().append(...).toString()；JDK 9 之后改用 invokedynamic + StringConcatFactory，避免每次都生成固定的 StringBuilder 字节码，为后续优化留空间。
-真正的坑在循环里：
-// 反例：每次迭代都新建 StringBuilder 和 String，O(n²) 级别的拷贝String s = &quot;&quot;;for (int i = 0; i &lt; 10000; i++) &#123;    s += i;&#125;// 正解：预估容量，避免扩容时反复 Arrays.copyOfStringBuilder sb = new StringBuilder(16 * 10000);for (int i = 0; i &lt; 10000; i++) &#123;    sb.append(i);&#125;String s = sb.toString();
+方法区（元空间）
+共享
+类元信息、常量、静态变量，JDK 8 后移出堆
 
 
 
 
+对象怎么判死可达性分析：从 GC Roots 出发，不可达即可回收。
+GC Roots 包括：虚拟机栈中的引用、方法区静态属性、常量引用、JNI 引用、活跃线程。
 
-StringBuilder
-StringBuffer
+为什么不只用引用计数？解决不了循环引用。
 
+分代与回收算法
+新生代（Eden : S0 : S1 &#x3D; 8 : 1 : 1）：对象优先在 Eden 分配，复制算法，存活对象少、复制成本低；
+老年代：大对象、长期存活对象，标记-清除 &#x2F; 标记-整理。
 
+对象晋升老年代的条件：
 
-线程安全
-否
-是（方法加 synchronized）
+年龄达到阈值（默认 15，-XX:MaxTenuringThreshold）；
+大对象直接进老年代（-XX:PretenureSizeThreshold）；
+动态年龄判断：Survivor 中同龄对象总和 &gt; 一半，年龄 ≥ 该年龄的直接晋升。
 
-
-性能
-更高
-略低
-
-
-适用场景
-方法内局部拼接（绝大多数）
-确实存在多线程共享写入时才用
+常见收集器
 
 
-单线程局部变量的拼接用 StringBuffer 属于无意义加锁，看到就该改掉。
-四、JDK 9 的紧凑字符串JDK 8 的 char[] 每个字符固定 2 字节。JDK 9 起改成 byte[] + coder：内容全是 Latin-1 就用 1 字节&#x2F;字符，含中文等再用 UTF-16 的 2 字节。纯英文&#x2F;数字为主的场景能省近一半堆内存——这对大量缓存 key、日志字符串的服务很实在。String 的公开 API 完全没变，所以业务代码无感。
-五、面试怎么答
-String 为什么设计成不可变？ → 线程安全、可缓存 hash（适合做 HashMap key）、常量池复用、作为参数传递不会被篡改。
-== 与 equals 区别？ → == 比引用（基本类型比值），equals 被 String 重写为逐字符比内容。比较字符串内容一律用 equals。
-StringBuilder 为什么比 + 快？ → + 在循环里每次生成新对象；StringBuilder 在可扩容数组上原地 append。补一句 JDK 9 的 invokedynamic，能显出版本意识。
-intern() 有什么用、有什么风险？ → 把字符串纳入池复用，适合大量重复值（如省市名）省内存；但池在堆里、受 GC 管理，滥用会让大量长生命周期引用滞留，且调用本身有哈希表开销。
+收集器
+特点
 
-六、踩坑清单
-null 参与 + 拼接会得到字符串 &quot;null&quot;，不会抛异常，容易把脏数据写进库；
-常量调 equals：&quot;ACTIVE&quot;.equals(status)，别写成 status.equals(&quot;ACTIVE&quot;)；
-split 参数是正则，按点分割要写 str.split(&quot;\\.&quot;)；
-String 不可变，密码这类敏感内容用完无法清零，安全场景用 char[] 并主动 Arrays.fill；
-substring 在 JDK 6 会共享原 char[] 导致大字符串无法回收，JDK 7+ 已改为复制，属于历史问题，别再当成现行结论；
-别用 new String(bytes) 不指定字符集，平台默认编码不一致会乱码，统一 StandardCharsets.UTF_8。
 
+
+Serial &#x2F; Serial Old
+单线程，客户端模式
+
+
+ParNew &#x2F; Parallel Scavenge
+多线程，关注吞吐量
+
+
+CMS
+并发标记清除，低停顿，有碎片
+
+
+G1
+分 Region，可预测停顿，JDK 9+ 默认
+
+
+ZGC
+超低停顿（&lt; 10ms），大堆场景
+
+
+常用参数-Xms512m -Xmx512m          # 初始/最大堆，线上建议相等，避免动态扩容-Xmn256m                   # 新生代大小-XX:MetaspaceSize=128m     # 元空间初始大小-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/logs   # OOM 时自动 dump
+
+排查套路jps -l                      # 找进程jstat -gcutil &lt;pid&gt; 1000    # 每秒看 GC 情况jmap -heap &lt;pid&gt;            # 堆使用jstack &lt;pid&gt; &gt; t.txt        # 线程快照，查死锁/阻塞
+
+面试常问：为什么新生代用复制算法？（存活对象少，复制成本低，且没有内存碎片）
 ]]></content>
       <categories>
         <category>Java基础</category>
       </categories>
       <tags>
-        <tag>Java</tag>
         <tag>面试</tag>
-        <tag>String</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>微服务网关统一鉴权：JWT + 全局过滤器设计</title>
-    <url>/2026/08/22/gateway-jwt-auth-notes/</url>
-    <content><![CDATA[前端只认一个入口（网关），鉴权也只在网关做一次，下游服务不再重复校验。
-
-
-整体流程前端 ──token──▶ 网关 ──校验JWT──▶ 解析出 userId ──写入请求头──▶ 业务服务
-
-网关侧：全局过滤器@Componentpublic class AuthFilter implements GlobalFilter, Ordered &#123;    private static final List&lt;String&gt; WHITE = List.of(            &quot;/auth/login&quot;, &quot;/auth/register&quot;, &quot;/system/users/register&quot;);    @Override    public Mono&lt;Void&gt; filter(ServerWebExchange exchange, GatewayFilterChain chain) &#123;        ServerHttpRequest request = exchange.getRequest();        String path = request.getURI().getPath();        if (WHITE.stream().anyMatch(path::startsWith)) &#123;            return chain.filter(exchange);        &#125;        String token = request.getHeaders().getFirst(&quot;Authorization&quot;);        if (StringUtils.isBlank(token)) &#123;            return unauthorized(exchange, &quot;未登录&quot;);        &#125;        try &#123;            Claims claims = JwtUtils.parse(token);            // 关键：把身份塞进请求头，下游用 SecurityUtils 取            ServerHttpRequest mutated = request.mutate()                    .header(&quot;user_id&quot;, claims.get(&quot;userId&quot;).toString())                    .header(&quot;username&quot;, claims.get(&quot;username&quot;, String.class))                    .build();            return chain.filter(exchange.mutate().request(mutated).build());        &#125; catch (Exception e) &#123;            return unauthorized(exchange, &quot;token 已失效&quot;);        &#125;    &#125;    @Override    public int getOrder() &#123; return -100; &#125;&#125;
-
-下游取身份Long userId = SecurityUtils.getUserId();   // 从 ThreadLocal 里拿，ThreadLocal 由拦截器从请求头填充
-
-
-原则：下游永远不信前端传的 userId，只信网关注入的请求头。
-
-内部调用（服务之间）网关只处理”外部进来的请求”。服务之间用 Feign 调用时：
-
-请求头带 from-source: inner；
-提供方用 @InnerAuth 校验这个头，不满足直接拒绝。
-
-这样即使有人拿到内网地址，没有 inner 头也调不通。
-三个安全细节
-禁止外部伪造 user_id：网关要先删除请求里的 user_id 头再注入（或直接覆盖），防止前端自己塞；
-token 过期：返回 401，前端跳登录；配合 refresh token 做续期；
-白名单要精确：用 startsWith 时注意 /system/users/1 这类路径别误放行。
-
-面试常问
-为什么不在每个服务里做鉴权？重复、难维护、服务间调用还要传 token；
-无状态 JWT 怎么退出登录？服务端维护黑名单（Redis），或短 token + refresh token；
-网关会成为瓶颈吗？网关做的是轻量校验（验签 + 解析），不查库，可水平扩容。
-
-]]></content>
-      <categories>
-        <category>项目实战</category>
-      </categories>
-      <tags>
-        <tag>微服务</tag>
-        <tag>Spring Cloud</tag>
-        <tag>网关</tag>
-        <tag>JWT</tag>
+        <tag>JVM</tag>
+        <tag>垃圾回收</tag>
       </tags>
   </entry>
   <entry>
@@ -1461,44 +1524,6 @@ NULL 能走索引吗？可以，但 IS NULL 选择性差，通常意义不大。
       </tags>
   </entry>
   <entry>
-    <title>Nacos：注册中心与配置中心的实战用法</title>
-    <url>/2026/09/05/nacos-registry-config-notes/</url>
-    <content><![CDATA[两个角色Nacos 同时是注册中心（服务发现）和配置中心（集中管理配置）。
-
-
-注册与发现spring:  application:    name: travel-note            # 服务名，Feign 就靠它找  cloud:    nacos:      discovery:        server-addr: 127.0.0.1:8848
-
-调用方只需写服务名：
-@FeignClient(name = &quot;travel-note&quot;)   // 由 Nacos 解析成真实 IP:Port
-
-好处：实例扩缩容、换端口、换机器都不用改代码。
-配置中心spring:  cloud:    nacos:      config:        server-addr: 127.0.0.1:8848        file-extension: yml        group: DEFAULT_GROUP        namespace: dev
-
-配置的 dataId 规则：$&#123;spring.application.name&#125;-$&#123;profile&#125;.$&#123;file-extension&#125;，例如 travel-note-dev.yml。
-动态刷新@RefreshScope      // 配置变了，这个 Bean 会重新创建@RestControllerpublic class ConfigController &#123;    @Value(&quot;$&#123;app.title&#125;&quot;) String title;&#125;
-
-注意：@RefreshScope 是通过销毁重建 Bean 实现的，所以别用在有状态的 Bean 上。
-踩坑清单
-命名空间&#x2F;分组不一致：服务注册在 dev，配置读的是 public → 配置读不到，且不报错；
-服务没注册上：spring.cloud.nacos.discovery.enabled 或网络端口不通；
-本地缓存：Nacos 客户端会缓存到 ~/nacos/config，改了配置不生效可以先清缓存；
-集群要配 MySQL：单机模式默认嵌入式 Derby，生产必须外置 MySQL。
-
-面试常问
-Nacos 和 Eureka 区别？Nacos 支持 AP&#x2F;CP 切换、自带配置中心、健康检查更快；
-服务挂了多久能感知？临时实例靠心跳（默认 15s 没心跳标记不健康，30s 摘除）。
-
-]]></content>
-      <categories>
-        <category>项目实战</category>
-      </categories>
-      <tags>
-        <tag>微服务</tag>
-        <tag>Spring Cloud</tag>
-        <tag>Nacos</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>项目实战：游记模块的接口设计与缓存实践</title>
     <url>/2026/08/08/note-module-design-notes/</url>
     <content><![CDATA[记录一个”游记模块”从表结构到接口的完整设计过程，重点在分页排序、收藏幂等、评论关联这三块。
@@ -1551,6 +1576,115 @@ Boolean favor(Long id, boolean on) &#123;    String key = &quot;user_note_collec
         <tag>微服务</tag>
         <tag>Redis</tag>
         <tag>MyBatis-Plus</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Nacos：注册中心与配置中心的实战用法</title>
+    <url>/2026/09/05/nacos-registry-config-notes/</url>
+    <content><![CDATA[两个角色Nacos 同时是注册中心（服务发现）和配置中心（集中管理配置）。
+
+
+注册与发现spring:  application:    name: travel-note            # 服务名，Feign 就靠它找  cloud:    nacos:      discovery:        server-addr: 127.0.0.1:8848
+
+调用方只需写服务名：
+@FeignClient(name = &quot;travel-note&quot;)   // 由 Nacos 解析成真实 IP:Port
+
+好处：实例扩缩容、换端口、换机器都不用改代码。
+配置中心spring:  cloud:    nacos:      config:        server-addr: 127.0.0.1:8848        file-extension: yml        group: DEFAULT_GROUP        namespace: dev
+
+配置的 dataId 规则：$&#123;spring.application.name&#125;-$&#123;profile&#125;.$&#123;file-extension&#125;，例如 travel-note-dev.yml。
+动态刷新@RefreshScope      // 配置变了，这个 Bean 会重新创建@RestControllerpublic class ConfigController &#123;    @Value(&quot;$&#123;app.title&#125;&quot;) String title;&#125;
+
+注意：@RefreshScope 是通过销毁重建 Bean 实现的，所以别用在有状态的 Bean 上。
+踩坑清单
+命名空间&#x2F;分组不一致：服务注册在 dev，配置读的是 public → 配置读不到，且不报错；
+服务没注册上：spring.cloud.nacos.discovery.enabled 或网络端口不通；
+本地缓存：Nacos 客户端会缓存到 ~/nacos/config，改了配置不生效可以先清缓存；
+集群要配 MySQL：单机模式默认嵌入式 Derby，生产必须外置 MySQL。
+
+面试常问
+Nacos 和 Eureka 区别？Nacos 支持 AP&#x2F;CP 切换、自带配置中心、健康检查更快；
+服务挂了多久能感知？临时实例靠心跳（默认 15s 没心跳标记不健康，30s 摘除）。
+
+]]></content>
+      <categories>
+        <category>项目实战</category>
+      </categories>
+      <tags>
+        <tag>微服务</tag>
+        <tag>Spring Cloud</tag>
+        <tag>Nacos</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Redis 缓存三问 + 分布式锁：穿透/击穿/雪崩</title>
+    <url>/2026/05/23/redis-cache-problems-notes/</url>
+    <content><![CDATA[三个”经典问题”一句话区分
+
+
+问题
+现象
+原因
+
+
+
+穿透
+大量请求查不存在的数据
+恶意请求 or 逻辑漏洞，每次都打到 DB
+
+
+击穿
+单个热点 key 失效瞬间
+大量请求同时回源
+
+
+雪崩
+大量 key 同时失效
+TTL 设成同一时间，或 Redis 挂掉
+
+
+
+
+解法穿透
+
+缓存空值（SET k &quot;&quot; EX 60），注意设短 TTL；
+布隆过滤器：不存在的一定拦截，存在的不一定放行；
+参数校验（id ≤ 0 直接拒绝）。
+
+击穿
+
+互斥锁：只放一个线程回源，其余等待重试（SETNX）；
+逻辑过期：value 里存过期时间，异步刷新，期间返回旧值。
+
+雪崩
+
+TTL 加随机值（base + random(0, 300)）；
+多级缓存（本地 Caffeine + Redis）；
+熔断降级、Redis 高可用（哨兵&#x2F;集群）。
+
+缓存一致性Cache Aside 模式：先更新数据库，再删除缓存（不是更新缓存）。
+为什么删而不更新？并发下”更新缓存”容易出现旧值覆盖新值；删除更简单可靠。
+延迟双删（应对主从延迟）：
+redis.del(key);db.update(...);Thread.sleep(500);   // 等主从同步redis.del(key);
+
+分布式锁（Redis 版）// 加锁：SET key value NX PX 30000Boolean ok = redis.opsForValue()        .setIfAbsent(key, uuid, Duration.ofSeconds(30));try &#123;    if (Boolean.TRUE.equals(ok)) &#123; /* 业务 */ &#125;&#125; finally &#123;    // 释放：必须校验 value 是自己的，用 Lua 保证原子性    String lua = &quot;if redis.call(&#x27;get&#x27;, KEYS[1]) == ARGV[1] &quot; +                 &quot;then return redis.call(&#x27;del&#x27;, KEYS[1]) else return 0 end&quot;;    redis.execute(new DefaultRedisScript&lt;&gt;(lua, Long.class), List.of(key), uuid);&#125;
+
+三个要点：互斥（NX）、防死锁（PX 过期）、防误删（value 校验 + Lua 原子）。
+生产环境更推荐 Redisson：自带看门狗自动续期、可重入、红锁。
+面试常问
+Redis 单线程为什么快？纯内存 + IO 多路复用 + 单线程无锁竞争；
+为什么用 Lua？保证”判断 + 删除”的原子性；
+锁过期了业务还没跑完怎么办？看门狗续期（Redisson）。
+
+]]></content>
+      <categories>
+        <category>框架与中间件</category>
+      </categories>
+      <tags>
+        <tag>面试</tag>
+        <tag>Redis</tag>
+        <tag>缓存</tag>
+        <tag>分布式锁</tag>
       </tags>
   </entry>
   <entry>
@@ -1625,111 +1759,6 @@ private 方法加注解无效（代理不了）；
       </tags>
   </entry>
   <entry>
-    <title>Java 线程池：七个参数与执行流程（面试必背）</title>
-    <url>/2026/03/28/java-threadpool-notes/</url>
-    <content><![CDATA[七个核心参数new ThreadPoolExecutor(    corePoolSize,      // 核心线程数（常驻）    maximumPoolSize,   // 最大线程数    keepAliveTime,     // 非核心线程空闲存活时间    TimeUnit.SECONDS,    workQueue,         // 阻塞队列    threadFactory,     // 线程工厂（命名方便排查）    handler            // 拒绝策略);
-
-
-
-执行流程（背这段就够）
-线程数 &lt; corePoolSize → 新建核心线程执行；
-线程数 ≥ 核心数 → 进队列排队；
-队列满了 → 线程数 &lt; maximumPoolSize → 新建非核心线程；
-队列满 + 线程数到上限 → 触发拒绝策略。
-
-
-口诀：核心 → 队列 → 扩容 → 拒绝。注意是”先排队再扩容”，不是”先扩容”。
-
-四种拒绝策略
-
-
-策略
-行为
-
-
-
-AbortPolicy（默认）
-抛 RejectedExecutionException
-
-
-CallerRunsPolicy
-由提交任务的线程自己执行（降速）
-
-
-DiscardPolicy
-静默丢弃
-
-
-DiscardOldestPolicy
-丢掉队列里最老的任务，再尝试提交
-
-
-为什么不用 Executors 创建阿里规约明确禁止：Executors.newFixedThreadPool 用的 LinkedBlockingQueue 容量是 Integer.MAX_VALUE，任务堆积会导致 OOM；newCachedThreadPool 最大线程数是 Integer.MAX_VALUE，线程爆炸。所以必须手动 new ThreadPoolExecutor。
-参数怎么定
-CPU 密集型：核心数 = CPU 核数 + 1
-IO 密集型：核心数 = CPU 核数 × 2（或更大，取决于阻塞比例）
-队列必须有界（ArrayBlockingQueue 或指定容量的 LinkedBlockingQueue）
-线程工厂里给线程起名字，出问题时 jstack 一眼看出来
-
-面试延伸
-线程池状态：RUNNING / SHUTDOWN / STOP / TIDYING / TERMINATED；
-shutdown() 不再接新任务、等已提交的跑完；shutdownNow() 中断线程、返回未执行任务；
-核心线程默认也会回收（allowCoreThreadTimeOut(true) 可以打开）。
-
-]]></content>
-      <categories>
-        <category>Java基础</category>
-      </categories>
-      <tags>
-        <tag>Java</tag>
-        <tag>并发</tag>
-        <tag>面试</tag>
-        <tag>线程池</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>Spring 事务失效的六种场景（附解决方案）</title>
-    <url>/2026/06/06/spring-transaction-notes/</url>
-    <content><![CDATA[@Transactional 加了却不回滚？基本就这六种原因。
-
-
-1. 同类内部方法调用（最常见）public void a() &#123;    b();          // 直接 this.b()，不走代理 → 事务失效&#125;@Transactionalpublic void b() &#123; ... &#125;
-
-原因：Spring 事务靠 AOP 代理实现，this.b() 绕过了代理对象。
-解决：
-// 方案一：注入自己（注意循环依赖，可用 @Lazy）@Autowired @Lazy private XxxService self;self.b();// 方案二：AopContext（需 @EnableAspectJAutoProxy(exposeProxy = true)）((XxxService) AopContext.currentProxy()).b();// 方案三：把 b() 拆到另一个类
-
-2. 方法不是 public@Transactional 基于代理，private &#x2F; protected &#x2F; static &#x2F; final 方法都失效。
-3. 异常被自己 catch 了try &#123;    doSomething();&#125; catch (Exception e) &#123;    log.error(&quot;出错了&quot;, e);   // 吞掉了异常 → 事务不会回滚&#125;
-
-事务管理器靠捕获异常决定回滚，你吞掉它就认为一切正常。
-4. 抛的是受检异常默认只对 RuntimeException 和 Error 回滚。抛 IOException 不会回滚。
-解决：@Transactional(rollbackFor = Exception.class)
-5. 数据库引擎不支持事务MyISAM 不支持事务，表引擎必须是 InnoDB。
-6. 多线程 &#x2F; 异步@Transactionalpublic void a() &#123;    new Thread(() -&gt; b()).start();   // 新线程不在同一个事务上下文&#125;
-
-事务绑定在当前线程（ThreadLocal），子线程是独立的事务。
-附加：传播行为搞错REQUIRES_NEW 会挂起外层事务开新事务；如果外层回滚，内层已提交的数据不会回滚。
-自检清单
- 方法 public 吗？
- 是通过代理（别的 Bean）调用的吗？
- 异常没被吞掉吗？
- rollbackFor 设了吗？
- 表是 InnoDB 吗？
- 是同一个线程里执行的？
-
-面试一句话：Spring 事务本质是 AOP 代理 + ThreadLocal 绑定连接，所以绕过代理、换线程、吞异常都会失效。
-]]></content>
-      <categories>
-        <category>框架与中间件</category>
-      </categories>
-      <tags>
-        <tag>Spring</tag>
-        <tag>面试</tag>
-        <tag>事务</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>Spring Cloud Alibaba：OpenFeign + Nacos 实战笔记</title>
     <url>/2026/06/20/spring-cloud-openfeign-notes/</url>
     <content><![CDATA[微服务之间互相调用，最省事的做法是把 Feign 契约单独抽到 api 模块，provider 实现、consumer 声明式调用。
@@ -1759,77 +1788,6 @@ feign:  client:    config:      default:        connectTimeout: 5000        read
         <tag>Spring Cloud</tag>
         <tag>Nacos</tag>
         <tag>OpenFeign</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>Redis 缓存三问 + 分布式锁：穿透/击穿/雪崩</title>
-    <url>/2026/05/23/redis-cache-problems-notes/</url>
-    <content><![CDATA[三个”经典问题”一句话区分
-
-
-问题
-现象
-原因
-
-
-
-穿透
-大量请求查不存在的数据
-恶意请求 or 逻辑漏洞，每次都打到 DB
-
-
-击穿
-单个热点 key 失效瞬间
-大量请求同时回源
-
-
-雪崩
-大量 key 同时失效
-TTL 设成同一时间，或 Redis 挂掉
-
-
-
-
-解法穿透
-
-缓存空值（SET k &quot;&quot; EX 60），注意设短 TTL；
-布隆过滤器：不存在的一定拦截，存在的不一定放行；
-参数校验（id ≤ 0 直接拒绝）。
-
-击穿
-
-互斥锁：只放一个线程回源，其余等待重试（SETNX）；
-逻辑过期：value 里存过期时间，异步刷新，期间返回旧值。
-
-雪崩
-
-TTL 加随机值（base + random(0, 300)）；
-多级缓存（本地 Caffeine + Redis）；
-熔断降级、Redis 高可用（哨兵&#x2F;集群）。
-
-缓存一致性Cache Aside 模式：先更新数据库，再删除缓存（不是更新缓存）。
-为什么删而不更新？并发下”更新缓存”容易出现旧值覆盖新值；删除更简单可靠。
-延迟双删（应对主从延迟）：
-redis.del(key);db.update(...);Thread.sleep(500);   // 等主从同步redis.del(key);
-
-分布式锁（Redis 版）// 加锁：SET key value NX PX 30000Boolean ok = redis.opsForValue()        .setIfAbsent(key, uuid, Duration.ofSeconds(30));try &#123;    if (Boolean.TRUE.equals(ok)) &#123; /* 业务 */ &#125;&#125; finally &#123;    // 释放：必须校验 value 是自己的，用 Lua 保证原子性    String lua = &quot;if redis.call(&#x27;get&#x27;, KEYS[1]) == ARGV[1] &quot; +                 &quot;then return redis.call(&#x27;del&#x27;, KEYS[1]) else return 0 end&quot;;    redis.execute(new DefaultRedisScript&lt;&gt;(lua, Long.class), List.of(key), uuid);&#125;
-
-三个要点：互斥（NX）、防死锁（PX 过期）、防误删（value 校验 + Lua 原子）。
-生产环境更推荐 Redisson：自带看门狗自动续期、可重入、红锁。
-面试常问
-Redis 单线程为什么快？纯内存 + IO 多路复用 + 单线程无锁竞争；
-为什么用 Lua？保证”判断 + 删除”的原子性；
-锁过期了业务还没跑完怎么办？看门狗续期（Redisson）。
-
-]]></content>
-      <categories>
-        <category>框架与中间件</category>
-      </categories>
-      <tags>
-        <tag>面试</tag>
-        <tag>Redis</tag>
-        <tag>缓存</tag>
-        <tag>分布式锁</tag>
       </tags>
   </entry>
   <entry>
@@ -1951,6 +1909,48 @@ starter 里不要塞 application.yml、不要带版本冲突的 Spring 依赖，
         <tag>面试</tag>
         <tag>Spring Boot</tag>
         <tag>自动配置</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Spring 事务失效的六种场景（附解决方案）</title>
+    <url>/2026/06/06/spring-transaction-notes/</url>
+    <content><![CDATA[@Transactional 加了却不回滚？基本就这六种原因。
+
+
+1. 同类内部方法调用（最常见）public void a() &#123;    b();          // 直接 this.b()，不走代理 → 事务失效&#125;@Transactionalpublic void b() &#123; ... &#125;
+
+原因：Spring 事务靠 AOP 代理实现，this.b() 绕过了代理对象。
+解决：
+// 方案一：注入自己（注意循环依赖，可用 @Lazy）@Autowired @Lazy private XxxService self;self.b();// 方案二：AopContext（需 @EnableAspectJAutoProxy(exposeProxy = true)）((XxxService) AopContext.currentProxy()).b();// 方案三：把 b() 拆到另一个类
+
+2. 方法不是 public@Transactional 基于代理，private &#x2F; protected &#x2F; static &#x2F; final 方法都失效。
+3. 异常被自己 catch 了try &#123;    doSomething();&#125; catch (Exception e) &#123;    log.error(&quot;出错了&quot;, e);   // 吞掉了异常 → 事务不会回滚&#125;
+
+事务管理器靠捕获异常决定回滚，你吞掉它就认为一切正常。
+4. 抛的是受检异常默认只对 RuntimeException 和 Error 回滚。抛 IOException 不会回滚。
+解决：@Transactional(rollbackFor = Exception.class)
+5. 数据库引擎不支持事务MyISAM 不支持事务，表引擎必须是 InnoDB。
+6. 多线程 &#x2F; 异步@Transactionalpublic void a() &#123;    new Thread(() -&gt; b()).start();   // 新线程不在同一个事务上下文&#125;
+
+事务绑定在当前线程（ThreadLocal），子线程是独立的事务。
+附加：传播行为搞错REQUIRES_NEW 会挂起外层事务开新事务；如果外层回滚，内层已提交的数据不会回滚。
+自检清单
+ 方法 public 吗？
+ 是通过代理（别的 Bean）调用的吗？
+ 异常没被吞掉吗？
+ rollbackFor 设了吗？
+ 表是 InnoDB 吗？
+ 是同一个线程里执行的？
+
+面试一句话：Spring 事务本质是 AOP 代理 + ThreadLocal 绑定连接，所以绕过代理、换线程、吞异常都会失效。
+]]></content>
+      <categories>
+        <category>框架与中间件</category>
+      </categories>
+      <tags>
+        <tag>Spring</tag>
+        <tag>面试</tag>
+        <tag>事务</tag>
       </tags>
   </entry>
 </search>

@@ -1,26 +1,10 @@
 /* 侧边栏数字滚动卡片：文章 / 分类 / 标签 */
 (function () {
+  /* 静态数据直接显示终值：不滚动计数，避免慢设备/截图里出现中间值 */
   function animate(root) {
-    var els = root.querySelectorAll('b[data-n]');
-    if (!('IntersectionObserver' in window)) {
-      els.forEach(function (el) { el.textContent = el.getAttribute('data-n'); });
-      return;
-    }
-    var io = new IntersectionObserver(function (entries) {
-      entries.forEach(function (e) {
-        if (!e.isIntersecting) return;
-        io.unobserve(e.target);
-        var target = +e.target.getAttribute('data-n');
-        var start = performance.now(), dur = 1200;
-        function step(t) {
-          var p = Math.min(1, (t - start) / dur);
-          e.target.textContent = Math.round(target * (1 - Math.pow(1 - p, 3)));
-          if (p < 1) requestAnimationFrame(step);
-        }
-        requestAnimationFrame(step);
-      });
-    }, { threshold: 0.3 });
-    els.forEach(function (el) { io.observe(el); });
+    root.querySelectorAll('b[data-n]').forEach(function (el) {
+      el.textContent = el.getAttribute('data-n');
+    });
   }
 
   /* 页面里的 <b class="js-stat" data-stat="posts"> 占位符也填上真实数字 */

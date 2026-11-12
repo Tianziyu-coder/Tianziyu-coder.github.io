@@ -17,15 +17,9 @@
   <rect width="1600" height="900" fill="url(#grid)"/>
   <rect width="1600" height="900" fill="url(#glow1)"/>
   <rect width="1600" height="900" fill="url(#glow2)"/>
-  <g stroke="#22d3ee" stroke-opacity="0.35" stroke-width="1.4" fill="none">
-    <path d="M0 640 H360 V540 H620 V700 H900"/>
-    <path d="M1600 260 H1240 V360 H980 V220 H720"/>
-    <path d="M120 120 V300 H300"/>
-    <path d="M1480 820 V620 H1300"/>
-  </g>
-  <g fill="#22d3ee" fill-opacity="0.85">
-    <circle cx="360" cy="540" r="4"/><circle cx="620" cy="700" r="4"/>
-    <circle cx="1240" cy="360" r="4"/><circle cx="980" cy="220" r="4"/>
-    <circle cx="300" cy="300" r="3"/><circle cx="1300" cy="620" r="3"/>
+  <g fill="#7dd3fc" fill-opacity="0.20">
+    <circle cx="210" cy="180" r="2"/><circle cx="480" cy="330" r="1.6"/>
+    <circle cx="1180" cy="190" r="2"/><circle cx="1390" cy="520" r="1.6"/>
+    <circle cx="760" cy="640" r="1.8"/><circle cx="980" cy="110" r="1.4"/>
   </g>
 </svg>
