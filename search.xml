@@ -45,37 +45,6 @@ ConcurrentHashMap 能存 null 吗？不能（key 和 value 都不行），因为
       </tags>
   </entry>
   <entry>
-    <title>Docker 部署 Spring Boot 微服务（实战流程）</title>
-    <url>/2026/10/05/docker-deploy-notes/</url>
-    <content><![CDATA[最简 DockerfileFROM eclipse-temurin:17-jreWORKDIR /app# 先拷 jar 再拷配置，利用分层缓存COPY target/*.jar app.jarENV TZ=Asia/ShanghaiENV JAVA_OPTS=&quot;-Xms256m -Xmx256m -Duser.timezone=Asia/Shanghai&quot;EXPOSE 8080ENTRYPOINT [&quot;sh&quot;, &quot;-c&quot;, &quot;java $JAVA_OPTS -jar app.jar&quot;]
-
-
-
-三个容易忽略的点
-时区：容器默认 UTC，日志时间会差 8 小时 → ENV TZ=Asia/Shanghai；
-JVM 堆：容器里不设 -Xmx，JVM 可能按宿主机内存申请，容易 OOM 被杀；
-日志挂载：容器删了日志就没了 → -v /data/logs:/app/logs。
-
-docker-compose 编排services:  mysql:    image: mysql:8.0    environment:      MYSQL_ROOT_PASSWORD: root      TZ: Asia/Shanghai    ports: [&quot;3306:3306&quot;]    volumes: [&quot;mysql-data:/var/lib/mysql&quot;]  redis:    image: redis:7    ports: [&quot;6379:6379&quot;]  travel-note:    build: ./travel-modules/travel-modules-note    depends_on: [mysql, redis]    environment:      SPRING_PROFILES_ACTIVE: dev    ports: [&quot;8081:8081&quot;]volumes:  mysql-data:
-
-docker compose up -d 一把起。
-常用命令docker ps -a                     # 看容器docker logs -f --tail 200 容器名  # 看日志docker compose up -d --build     # 重新构建启动docker stats                     # 资源占用
-
-注意
-微服务之间别写 localhost：容器内 localhost 是它自己，要用 服务名（compose 里自动有 DNS）；
-数据库连接串用 jdbc:mysql://mysql:3306/库名（服务名当主机名）。
-
-]]></content>
-      <categories>
-        <category>项目实战</category>
-      </categories>
-      <tags>
-        <tag>Docker</tag>
-        <tag>部署</tag>
-        <tag>微服务</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>微服务网关统一鉴权：JWT + 全局过滤器设计</title>
     <url>/2026/08/22/gateway-jwt-auth-notes/</url>
     <content><![CDATA[前端只认一个入口（网关），鉴权也只在网关做一次，下游服务不再重复校验。
@@ -108,308 +77,13 @@ token 过期：返回 401，前端跳登录；配合 refresh token 做续期；
 
 ]]></content>
       <categories>
-        <category>项目实战</category>
+        <category>动手实践</category>
       </categories>
       <tags>
-        <tag>微服务</tag>
         <tag>Spring Cloud</tag>
         <tag>网关</tag>
         <tag>JWT</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>Java 异常体系与工程里的异常处理规范</title>
-    <url>/2025/03/22/java-exception-best-practices/</url>
-    <content><![CDATA[一句话总结Throwable 分 Error 和 Exception，Exception 再分受检与运行时异常；工程上推荐业务异常用运行时异常 + 全局 @RestControllerAdvice 兜底，异常要保留 cause、要打日志、不要吞，还要注意默认事务只对 RuntimeException 回滚。
-
-
-一、异常体系Throwable├── Error                JVM 层严重问题，不捕获│   ├── OutOfMemoryError│   └── StackOverflowError└── Exception    ├── RuntimeException  非受检（Unchecked）    │   ├── NullPointerException    │   ├── IllegalArgumentException    │   └── ClassCastException    └── 其他               受检（Checked），编译器强制处理        ├── IOException        └── SQLException
-
-
-
-
-
-受检异常
-运行时异常
-
-
-
-编译期检查
-必须 catch 或 throws
-不强制
-
-
-典型代表
-IOException、SQLException
-NullPointerException、业务异常
-
-
-设计意图
-调用方可预期且可恢复
-编程错误或不可恢复的业务状态
-
-
-框架倾向
-Spring JDBC 把它转成 DataAccessException
-Spring 事务默认只对它回滚
-
-
-现代 Java 后端普遍少用受检异常：层层 throws 污染签名，lambda 里还不能直接抛。Spring 全家桶基本都抛运行时异常，用 DataAccessException 把 SQLException 包装掉。
-二、try-with-resources 与 finallytry (InputStream in  = Files.newInputStream(src);     OutputStream out = Files.newOutputStream(dst)) &#123;    in.transferTo(out);&#125;   // 按声明的逆序自动 close：先 out 再 in
-
-要求资源实现 AutoCloseable。它的两个细节很实用：
-
-关闭异常不会吞掉业务异常：如果 try 块和 close 都抛异常，close 的异常会作为 suppressed 挂在主异常上（getSuppressed() 可查）；
-手写 finally 时 finally 里的 return 会覆盖 try 中的返回值，也能把抛出的异常吃掉，属于明确禁止的写法。
-
-// 反例：finally 里 return，方法永远返回 2try &#123; return 1; &#125; finally &#123; return 2; &#125;
-
-三、日志与异常链// 反例：三宗罪——吞异常、printStackTrace、丢失 causetry &#123;    orderService.create(req);&#125; catch (Exception e) &#123;    e.printStackTrace();    throw new BizException(&quot;创建失败&quot;);&#125;// 正解try &#123;    orderService.create(req);&#125; catch (SQLException e) &#123;    log.error(&quot;创建订单失败, orderId=&#123;&#125;&quot;, req.getOrderId(), e);  // 最后一个参数是 Throwable    throw new BizException(&quot;CREATE_FAILED&quot;, &quot;创建订单失败&quot;, e);    // 保留 cause&#125;
-
-要点：
-
-用 SLF4J 的 &#123;&#125; 占位符，别字符串拼接；异常对象作为最后一个参数传入，SLF4J 会自动打印堆栈；
-throw new XxxException(msg, e) 保留因果链，否则排查时只能看到最外层一句”失败”；
-全局兜底处打 error 级别，可预期的业务校验失败打 warn，别让正常业务分支刷满 error 日志；
-异常构造会调用 fillInStackTrace() 抓取栈快照，成本不低，不要用异常做流程控制（例如用抛异常跳出循环）。
-
-四、Spring 项目里的统一处理public class BizException extends RuntimeException &#123;    private final String code;    public BizException(String code, String message, Throwable cause) &#123;        super(message, cause);        this.code = code;    &#125;&#125;
-
-@RestControllerAdvice@Slf4jpublic class GlobalExceptionHandler &#123;    @ExceptionHandler(BizException.class)    public R&lt;Void&gt; handleBiz(BizException e) &#123;        log.warn(&quot;业务异常 code=&#123;&#125;, msg=&#123;&#125;&quot;, e.getCode(), e.getMessage());        return R.fail(e.getCode(), e.getMessage());    &#125;    @ExceptionHandler(MethodArgumentNotValidException.class)    public R&lt;Void&gt; handleValid(MethodArgumentNotValidException e) &#123;        String msg = e.getBindingResult().getFieldErrors().stream()                .map(f -&gt; f.getField() + &quot;: &quot; + f.getDefaultMessage())                .collect(Collectors.joining(&quot;; &quot;));        return R.fail(&quot;PARAM_INVALID&quot;, msg);    &#125;    @ExceptionHandler(Exception.class)    public R&lt;Void&gt; handleUnknown(Exception e) &#123;        log.error(&quot;未预期异常&quot;, e);            // 内部细节只进日志        return R.fail(&quot;SYSTEM_ERROR&quot;, &quot;系统繁忙，请稍后重试&quot;);  // 对外不暴露堆栈    &#125;&#125;
-
-三条原则：Controller 层不写 try-catch（交给 advice）、对外不返回堆栈&#x2F;SQL、异常码集中成枚举或常量类而不是散落的字符串。
-五、异常与事务：最容易踩的坑@Transactional 默认只在抛出 RuntimeException 或 Error 时回滚，受检异常不回滚。
-@Transactionalpublic void create(...) throws IOException &#123;    mapper.insert(...);    fileClient.upload(...);      // 抛 IOException&#125;   // 事务照样提交，数据落库了但文件没传成功
-
-三种典型不回滚场景：
-
-
-
-场景
-原因
-解决
-
-
-
-catch 住异常没再抛
-切面看不到异常，认为方法成功
-要么不 catch，要么 throw 出去 &#x2F; TransactionAspectSupport.currentTransactionStatus().setRollbackOnly()
-
-
-抛受检异常
-默认不识别
-@Transactional(rollbackFor = Exception.class)
-
-
-自调用同类方法
-没走代理
-拆到另一个 Bean，或用 AopContext.currentProxy()
-
-
-显式写 rollbackFor = Exception.class 是成本最低的习惯，但别把它当成 catch 吞异常的挡箭牌。
-六、面试怎么答
-受检异常有必要吗？ → 设计上是提醒调用方处理可恢复情况；实际工程里容易造成签名污染，Spring 等框架倾向于包装成运行时异常，只在”调用方确实能恢复”时用受检。
-finally 一定执行吗？ → 正常流程下一定执行；但 System.exit()、JVM 崩溃、线程被杀、死循环不退出时不会。try-with-resources 能替代大部分 finally。
-try-with-resources 的原理？ → 编译器翻译成带 suppressed 处理的 finally 块，按声明逆序调用 close()。
-@Transactional 什么时候不回滚？ → 受检异常、异常被吞、自调用、非 public 方法、异常发生在另一个线程里。
-
-七、踩坑清单
-catch 顺序必须子类在前、父类在后，否则后面的分支编译不过；
-catch (Exception e) &#123;&#125; 空块是排查噩梦，至少要打一行日志；
-别在循环体里逐条 try-catch 后继续跑还刷日志，容易把磁盘打满，应该批量收集失败项；
-Objects.requireNonNull &#x2F; IllegalArgumentException 做参数校验，比留到后面报 NPE 更易定位；
-异步线程里的异常不会冒泡到主线程，@Async 方法要配 AsyncUncaughtExceptionHandler；
-自定义异常别重写 fillInStackTrace() 来”提升性能”，除非你清楚会丢掉所有堆栈信息。
-
-]]></content>
-      <categories>
-        <category>Java基础</category>
-      </categories>
-      <tags>
-        <tag>Java</tag>
-        <tag>异常</tag>
-        <tag>Spring</tag>
-        <tag>面试</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>泛型擦除、反射与运行时注解：从编译期到运行期</title>
-    <url>/2025/05/31/java-generics-reflection-notes/</url>
-    <content><![CDATA[一句话总结Java 泛型是编译期特性：编译后类型参数被擦除到边界，运行时 List&lt;String&gt; 和 List&lt;Integer&gt; 是同一个类；但声明在类&#x2F;字段&#x2F;方法签名上的泛型信息会写进 Signature 属性，可以用反射读回来。
-
-
-一、擦除规则与桥方法// 源码class Box&lt;T extends Number &amp; Comparable&lt;T&gt;&gt; &#123;    private T value;    public T get() &#123; return value; &#125;&#125;// 擦除后（概念上）class Box &#123;    private Number value;    public Number get() &#123; return value; &#125;&#125;
-
-规则：无界 T 擦成 Object；有界擦成第一个边界（多个边界时后面的靠插入强转实现）；编译器在必要处自动加强转，并生成桥方法保持多态不被破坏。
-interface Box&lt;T&gt; &#123; void set(T v); &#125;class StringBox implements Box&lt;String&gt; &#123;    @Override public void set(String v) &#123; /* ... */ &#125;    // 编译器额外生成（字节码里真实存在）：    // public void set(Object v) &#123; set((String) v); &#125;&#125;
-
-如果没这个桥方法，通过 Box 接口调用 set 会找不到实现——这就是擦除与多态冲突的修补方式，也是反射时看到”两个 set 方法”的原因（用 isBridge() 过滤）。
-擦除带来的限制（面试高频）：
-
-
-
-写法
-是否合法
-原因
-
-
-
-new T()
-否
-运行时没有 T 的具体类型
-
-
-new T[10]
-否
-数组需要确切组件类型
-
-
-if (obj instanceof List&lt;String&gt;)
-否
-运行时无法区分参数化类型
-
-
-List&lt;int&gt;
-否
-类型参数必须是引用类型，用 List&lt;Integer&gt;
-
-
-重载 f(List&lt;String&gt;) &#x2F; f(List&lt;Integer&gt;)
-否
-擦除后签名相同
-
-
-List&lt;String&gt; ls = new ArrayList&lt;Object&gt;()
-否
-泛型不协变，要用通配符
-
-
-二、PECS 与通配符Producer Extends, Consumer Super：只往外读用 ? extends，只往里写用 ? super，两者都做就别用通配符。
-// 读取：接受 List&lt;Integer&gt;、List&lt;Double&gt; 等任意 Number 子类的列表public static double sum(List&lt;? extends Number&gt; list) &#123;    double total = 0;    for (Number n : list) total += n.doubleValue();    return total;    // list.add(1);  // 编译错误：不知道实际是 List&lt;Double&gt; 还是别的&#125;// 写入：可以安全地放 Integer 及其子类public static void fill(List&lt;? super Integer&gt; list) &#123;    list.add(1);    Object o = list.get(0);   // 读出来只能是 Object&#125;
-
-List&lt;?&gt; 和 List&lt;Object&gt; 不一样：前者是”某种未知类型”，只能读成 Object、不能 add（除 null）；后者明确是 Object，什么都能放。
-三、反射能拿回泛型信息吗能，但只有声明处的签名（类、字段、方法返回值&#x2F;参数上的泛型），拿不到 new ArrayList&lt;String&gt;() 这个局部变量的实际参数类型——因为它没被写进 class 文件。
-Method m = Mapper.class.getMethod(&quot;findUsers&quot;);Type rt = m.getGenericReturnType();          // 注意不是 getReturnType()if (rt instanceof ParameterizedType pt) &#123;    Type arg = pt.getActualTypeArguments()[0];  // User    System.out.println(arg.getTypeName());&#125;// 泛型类型令牌：Gson / MyBatis 常用这个套路绕过擦除new TypeToken&lt;List&lt;User&gt;&gt;() &#123;&#125;.getType();
-
-原理：匿名内部类把 List&lt;User&gt; 写进了自己的父类签名，getGenericSuperclass() 因此能读到。这也是 TypeReference、TypeToken 必须写成匿名子类的原因。
-反射实战要点：
-Class&lt;?&gt; c = Class.forName(&quot;com.example.Order&quot;);  // 会触发类初始化Field f = c.getDeclaredField(&quot;id&quot;);f.setAccessible(true);                            // 访问私有成员Object v = f.get(instance);
-
-
-getDeclaredXxx 只取本类声明的（含 private），getXxx 取所有 public（含继承）；
-反射调用有访问检查和方法查找开销，热路径上应缓存 Method/Field，或改用 MethodHandle &#x2F; 编译期生成代码；
-JDK 9 模块化之后，反射访问非公开成员可能抛 InaccessibleObjectException，需要模块 opens 或启动参数 --add-opens。
-
-四、注解与自定义运行时注解四个元注解：@Retention（生命周期）、@Target（能标在哪）、@Documented、@Inherited；JDK 8 又加了 @Repeatable。
-
-
-
-RetentionPolicy
-保留到
-典型用途
-
-
-
-SOURCE
-源码
-@Override、@SuppressWarnings、Lombok
-
-
-CLASS
-class 文件（默认）
-字节码增强、编译期工具
-
-
-RUNTIME
-运行时，可反射读取
-Spring、MyBatis、自定义切面
-
-
-@Retention(RetentionPolicy.RUNTIME)@Target(ElementType.METHOD)public @interface Idempotent &#123;    String key() default &quot;&quot;;      // 注解元素只能是基本类型/String/Class/枚举/注解/数组    int expireSeconds() default 60;&#125;
-
-在 Spring 项目里落地（拦截器或 AOP 二选一）：
-@Aspect@Componentpublic class IdempotentAspect &#123;    @Around(&quot;@annotation(idem)&quot;)    public Object around(ProceedingJoinPoint pjp, Idempotent idem) throws Throwable &#123;        String key = buildKey(pjp, idem.key());        Boolean ok = redisTemplate.opsForValue()                .setIfAbsent(key, &quot;1&quot;, idem.expireSeconds(), TimeUnit.SECONDS);        if (!Boolean.TRUE.equals(ok)) throw new BizException(&quot;请勿重复提交&quot;);        try &#123;            return pjp.proceed();        &#125; finally &#123;            // 业务失败时释放，允许重试；是否删除取决于业务语义        &#125;    &#125;&#125;
-
-注解本身只是元数据，不会有任何行为；行为来自读它的框架。这一点面试时常被问倒。
-五、面试怎么答
-泛型擦除是什么？ → 编译期把类型参数替换成边界并插入强转，运行时不保留参数化类型，目的是兼容 JDK 5 之前的字节码。
-为什么 List&lt;String&gt; 不能赋给 List&lt;Object&gt;？ → 泛型不协变；否则可以通过 List&lt;Object&gt; 往里塞 Integer 破坏类型安全。数组是协变的，但会在运行时用 ArrayStoreException 兜底，两者设计不同。
-反射能不能拿到泛型？ → 声明签名可以（getGenericReturnType &#x2F; getGenericSuperclass），局部变量不行。
-注解为什么能被 Spring 识别？ → @Retention(RUNTIME) 让注解在运行时可见，框架通过反射&#x2F;AOP 读取并执行逻辑。
-
-六、踩坑清单
-Arrays.asList(arr) 返回的是固定长度的内部 ArrayList，add/remove 会抛 UnsupportedOperationException；List.of(...) 完全不可变；
-Collections.emptyList() 也是不可变的，别往里 add；
-基本类型数组传给 Arrays.asList 会得到 List&lt;int[]&gt; 而不是 List&lt;Integer&gt;；
-反射 setAccessible(true) 在 JDK 17 下反射 JDK 内部类会失败，先考虑有没有公开 API；
-自定义注解别忘 @Retention(RUNTIME)，否则运行时读不到，切面完全不生效；
-Optional、List&lt;T&gt; 这类泛型别当方法参数传 null，返回空集合&#x2F;空 Optional 比 null 好处理。
-
-]]></content>
-      <categories>
-        <category>Java基础</category>
-      </categories>
-      <tags>
-        <tag>Java</tag>
-        <tag>泛型</tag>
-        <tag>反射</tag>
-        <tag>注解</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>Java 集合：HashMap 底层结构与扩容机制</title>
-    <url>/2026/03/15/java-hashmap-notes/</url>
-    <content><![CDATA[一句话总结JDK 8 的 HashMap &#x3D; 数组 + 链表 + 红黑树。默认容量 16，负载因子 0.75，扩容时容量翻倍。
-
-
-底层结构
-
-
-组成部分
-作用
-
-
-
-Node[] table
-哈希桶数组，长度永远是 2 的幂
-
-
-Node 链表
-哈希冲突时用链地址法串起来
-
-
-TreeNode 红黑树
-链表长度 ≥ 8 且桶容量 ≥ 64 时树化，查询从 O(n) 降到 O(log n)
-
-
-static class Node&lt;K,V&gt; implements Map.Entry&lt;K,V&gt; &#123;    final int hash;    final K key;    V value;    Node&lt;K,V&gt; next;&#125;
-
-put 的核心流程
-hash(key)：(h = key.hashCode()) ^ (h &gt;&gt;&gt; 16) —— 让高位参与运算，减少冲突；
-定位桶：(n - 1) &amp; hash，等价于对 n 取模，但 n 是 2 的幂所以能用位运算；
-桶为空 → 直接放；桶非空 → 比对 hash 和 key，相同则覆盖，否则挂到链表&#x2F;红黑树尾部；
-++size &gt; threshold → 触发 resize()。
-
-为什么容量必须是 2 的幂(n - 1) &amp; hash 只有在 n 是 2 的幂时才等价于 hash % n，而且位运算更快。扩容时元素要么留在原位，要么移动 oldCap，不用重新计算 hash。
-扩容（resize）
-触发条件：size &gt; capacity * 0.75；
-新容量 &#x3D; 旧容量 × 2，阈值也翻倍；
-JDK 8 用高低位拆分（(e.hash &amp; oldCap) == 0）避免 JDK 7 头插法导致的死循环。
-
-面试常问
-为什么负载因子是 0.75？（空间与冲突概率的折中，泊松分布下链表长度 8 的概率极低）
-为什么树化阈值是 8、退化阈值是 6？（留缓冲，避免频繁转换）
-HashMap 线程安全吗？（不安全，多线程扩容可能丢数据；并发用 ConcurrentHashMap）
-key 为什么常用 String 或不可变对象？（hashCode 稳定，否则 put 进去就 get 不出来）
-
-]]></content>
-      <categories>
-        <category>Java基础</category>
-      </categories>
-      <tags>
-        <tag>Java</tag>
-        <tag>集合</tag>
-        <tag>HashMap</tag>
+        <tag>微服务</tag>
       </tags>
   </entry>
   <entry>
@@ -565,6 +239,332 @@ SET key value NX PX 30000 + Lua 校验 value 删除
       <tags>
         <tag>Java</tag>
         <tag>面试</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Java 异常体系与工程里的异常处理规范</title>
+    <url>/2025/03/22/java-exception-best-practices/</url>
+    <content><![CDATA[一句话总结Throwable 分 Error 和 Exception，Exception 再分受检与运行时异常；工程上推荐业务异常用运行时异常 + 全局 @RestControllerAdvice 兜底，异常要保留 cause、要打日志、不要吞，还要注意默认事务只对 RuntimeException 回滚。
+
+
+一、异常体系Throwable├── Error                JVM 层严重问题，不捕获│   ├── OutOfMemoryError│   └── StackOverflowError└── Exception    ├── RuntimeException  非受检（Unchecked）    │   ├── NullPointerException    │   ├── IllegalArgumentException    │   └── ClassCastException    └── 其他               受检（Checked），编译器强制处理        ├── IOException        └── SQLException
+
+
+
+
+
+受检异常
+运行时异常
+
+
+
+编译期检查
+必须 catch 或 throws
+不强制
+
+
+典型代表
+IOException、SQLException
+NullPointerException、业务异常
+
+
+设计意图
+调用方可预期且可恢复
+编程错误或不可恢复的业务状态
+
+
+框架倾向
+Spring JDBC 把它转成 DataAccessException
+Spring 事务默认只对它回滚
+
+
+现代 Java 后端普遍少用受检异常：层层 throws 污染签名，lambda 里还不能直接抛。Spring 全家桶基本都抛运行时异常，用 DataAccessException 把 SQLException 包装掉。
+二、try-with-resources 与 finallytry (InputStream in  = Files.newInputStream(src);     OutputStream out = Files.newOutputStream(dst)) &#123;    in.transferTo(out);&#125;   // 按声明的逆序自动 close：先 out 再 in
+
+要求资源实现 AutoCloseable。它的两个细节很实用：
+
+关闭异常不会吞掉业务异常：如果 try 块和 close 都抛异常，close 的异常会作为 suppressed 挂在主异常上（getSuppressed() 可查）；
+手写 finally 时 finally 里的 return 会覆盖 try 中的返回值，也能把抛出的异常吃掉，属于明确禁止的写法。
+
+// 反例：finally 里 return，方法永远返回 2try &#123; return 1; &#125; finally &#123; return 2; &#125;
+
+三、日志与异常链// 反例：三宗罪——吞异常、printStackTrace、丢失 causetry &#123;    orderService.create(req);&#125; catch (Exception e) &#123;    e.printStackTrace();    throw new BizException(&quot;创建失败&quot;);&#125;// 正解try &#123;    orderService.create(req);&#125; catch (SQLException e) &#123;    log.error(&quot;创建订单失败, orderId=&#123;&#125;&quot;, req.getOrderId(), e);  // 最后一个参数是 Throwable    throw new BizException(&quot;CREATE_FAILED&quot;, &quot;创建订单失败&quot;, e);    // 保留 cause&#125;
+
+要点：
+
+用 SLF4J 的 &#123;&#125; 占位符，别字符串拼接；异常对象作为最后一个参数传入，SLF4J 会自动打印堆栈；
+throw new XxxException(msg, e) 保留因果链，否则排查时只能看到最外层一句”失败”；
+全局兜底处打 error 级别，可预期的业务校验失败打 warn，别让正常业务分支刷满 error 日志；
+异常构造会调用 fillInStackTrace() 抓取栈快照，成本不低，不要用异常做流程控制（例如用抛异常跳出循环）。
+
+四、Spring 项目里的统一处理public class BizException extends RuntimeException &#123;    private final String code;    public BizException(String code, String message, Throwable cause) &#123;        super(message, cause);        this.code = code;    &#125;&#125;
+
+@RestControllerAdvice@Slf4jpublic class GlobalExceptionHandler &#123;    @ExceptionHandler(BizException.class)    public R&lt;Void&gt; handleBiz(BizException e) &#123;        log.warn(&quot;业务异常 code=&#123;&#125;, msg=&#123;&#125;&quot;, e.getCode(), e.getMessage());        return R.fail(e.getCode(), e.getMessage());    &#125;    @ExceptionHandler(MethodArgumentNotValidException.class)    public R&lt;Void&gt; handleValid(MethodArgumentNotValidException e) &#123;        String msg = e.getBindingResult().getFieldErrors().stream()                .map(f -&gt; f.getField() + &quot;: &quot; + f.getDefaultMessage())                .collect(Collectors.joining(&quot;; &quot;));        return R.fail(&quot;PARAM_INVALID&quot;, msg);    &#125;    @ExceptionHandler(Exception.class)    public R&lt;Void&gt; handleUnknown(Exception e) &#123;        log.error(&quot;未预期异常&quot;, e);            // 内部细节只进日志        return R.fail(&quot;SYSTEM_ERROR&quot;, &quot;系统繁忙，请稍后重试&quot;);  // 对外不暴露堆栈    &#125;&#125;
+
+三条原则：Controller 层不写 try-catch（交给 advice）、对外不返回堆栈&#x2F;SQL、异常码集中成枚举或常量类而不是散落的字符串。
+五、异常与事务：最容易踩的坑@Transactional 默认只在抛出 RuntimeException 或 Error 时回滚，受检异常不回滚。
+@Transactionalpublic void create(...) throws IOException &#123;    mapper.insert(...);    fileClient.upload(...);      // 抛 IOException&#125;   // 事务照样提交，数据落库了但文件没传成功
+
+三种典型不回滚场景：
+
+
+
+场景
+原因
+解决
+
+
+
+catch 住异常没再抛
+切面看不到异常，认为方法成功
+要么不 catch，要么 throw 出去 &#x2F; TransactionAspectSupport.currentTransactionStatus().setRollbackOnly()
+
+
+抛受检异常
+默认不识别
+@Transactional(rollbackFor = Exception.class)
+
+
+自调用同类方法
+没走代理
+拆到另一个 Bean，或用 AopContext.currentProxy()
+
+
+显式写 rollbackFor = Exception.class 是成本最低的习惯，但别把它当成 catch 吞异常的挡箭牌。
+六、面试怎么答
+受检异常有必要吗？ → 设计上是提醒调用方处理可恢复情况；实际工程里容易造成签名污染，Spring 等框架倾向于包装成运行时异常，只在”调用方确实能恢复”时用受检。
+finally 一定执行吗？ → 正常流程下一定执行；但 System.exit()、JVM 崩溃、线程被杀、死循环不退出时不会。try-with-resources 能替代大部分 finally。
+try-with-resources 的原理？ → 编译器翻译成带 suppressed 处理的 finally 块，按声明逆序调用 close()。
+@Transactional 什么时候不回滚？ → 受检异常、异常被吞、自调用、非 public 方法、异常发生在另一个线程里。
+
+七、踩坑清单
+catch 顺序必须子类在前、父类在后，否则后面的分支编译不过；
+catch (Exception e) &#123;&#125; 空块是排查噩梦，至少要打一行日志；
+别在循环体里逐条 try-catch 后继续跑还刷日志，容易把磁盘打满，应该批量收集失败项；
+Objects.requireNonNull &#x2F; IllegalArgumentException 做参数校验，比留到后面报 NPE 更易定位；
+异步线程里的异常不会冒泡到主线程，@Async 方法要配 AsyncUncaughtExceptionHandler；
+自定义异常别重写 fillInStackTrace() 来”提升性能”，除非你清楚会丢掉所有堆栈信息。
+
+]]></content>
+      <categories>
+        <category>Java基础</category>
+      </categories>
+      <tags>
+        <tag>Java</tag>
+        <tag>面试</tag>
+        <tag>异常</tag>
+        <tag>Spring</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Docker 部署 Spring Boot 微服务（实战流程）</title>
+    <url>/2026/10/05/docker-deploy-notes/</url>
+    <content><![CDATA[最简 DockerfileFROM eclipse-temurin:17-jreWORKDIR /app# 先拷 jar 再拷配置，利用分层缓存COPY target/*.jar app.jarENV TZ=Asia/ShanghaiENV JAVA_OPTS=&quot;-Xms256m -Xmx256m -Duser.timezone=Asia/Shanghai&quot;EXPOSE 8080ENTRYPOINT [&quot;sh&quot;, &quot;-c&quot;, &quot;java $JAVA_OPTS -jar app.jar&quot;]
+
+
+
+三个容易忽略的点
+时区：容器默认 UTC，日志时间会差 8 小时 → ENV TZ=Asia/Shanghai；
+JVM 堆：容器里不设 -Xmx，JVM 可能按宿主机内存申请，容易 OOM 被杀；
+日志挂载：容器删了日志就没了 → -v /data/logs:/app/logs。
+
+docker-compose 编排services:  mysql:    image: mysql:8.0    environment:      MYSQL_ROOT_PASSWORD: root      TZ: Asia/Shanghai    ports: [&quot;3306:3306&quot;]    volumes: [&quot;mysql-data:/var/lib/mysql&quot;]  redis:    image: redis:7    ports: [&quot;6379:6379&quot;]  travel-note:    build: ./travel-modules/travel-modules-note    depends_on: [mysql, redis]    environment:      SPRING_PROFILES_ACTIVE: dev    ports: [&quot;8081:8081&quot;]volumes:  mysql-data:
+
+docker compose up -d 一把起。
+常用命令docker ps -a                     # 看容器docker logs -f --tail 200 容器名  # 看日志docker compose up -d --build     # 重新构建启动docker stats                     # 资源占用
+
+注意
+微服务之间别写 localhost：容器内 localhost 是它自己，要用 服务名（compose 里自动有 DNS）；
+数据库连接串用 jdbc:mysql://mysql:3306/库名（服务名当主机名）。
+
+]]></content>
+      <categories>
+        <category>动手实践</category>
+      </categories>
+      <tags>
+        <tag>微服务</tag>
+        <tag>Docker</tag>
+        <tag>部署</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Java 集合：HashMap 底层结构与扩容机制</title>
+    <url>/2026/03/15/java-hashmap-notes/</url>
+    <content><![CDATA[一句话总结JDK 8 的 HashMap &#x3D; 数组 + 链表 + 红黑树。默认容量 16，负载因子 0.75，扩容时容量翻倍。
+
+
+底层结构
+
+
+组成部分
+作用
+
+
+
+Node[] table
+哈希桶数组，长度永远是 2 的幂
+
+
+Node 链表
+哈希冲突时用链地址法串起来
+
+
+TreeNode 红黑树
+链表长度 ≥ 8 且桶容量 ≥ 64 时树化，查询从 O(n) 降到 O(log n)
+
+
+static class Node&lt;K,V&gt; implements Map.Entry&lt;K,V&gt; &#123;    final int hash;    final K key;    V value;    Node&lt;K,V&gt; next;&#125;
+
+put 的核心流程
+hash(key)：(h = key.hashCode()) ^ (h &gt;&gt;&gt; 16) —— 让高位参与运算，减少冲突；
+定位桶：(n - 1) &amp; hash，等价于对 n 取模，但 n 是 2 的幂所以能用位运算；
+桶为空 → 直接放；桶非空 → 比对 hash 和 key，相同则覆盖，否则挂到链表&#x2F;红黑树尾部；
+++size &gt; threshold → 触发 resize()。
+
+为什么容量必须是 2 的幂(n - 1) &amp; hash 只有在 n 是 2 的幂时才等价于 hash % n，而且位运算更快。扩容时元素要么留在原位，要么移动 oldCap，不用重新计算 hash。
+扩容（resize）
+触发条件：size &gt; capacity * 0.75；
+新容量 &#x3D; 旧容量 × 2，阈值也翻倍；
+JDK 8 用高低位拆分（(e.hash &amp; oldCap) == 0）避免 JDK 7 头插法导致的死循环。
+
+面试常问
+为什么负载因子是 0.75？（空间与冲突概率的折中，泊松分布下链表长度 8 的概率极低）
+为什么树化阈值是 8、退化阈值是 6？（留缓冲，避免频繁转换）
+HashMap 线程安全吗？（不安全，多线程扩容可能丢数据；并发用 ConcurrentHashMap）
+key 为什么常用 String 或不可变对象？（hashCode 稳定，否则 put 进去就 get 不出来）
+
+]]></content>
+      <categories>
+        <category>Java基础</category>
+      </categories>
+      <tags>
+        <tag>Java</tag>
+        <tag>集合</tag>
+        <tag>HashMap</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>泛型擦除、反射与运行时注解：从编译期到运行期</title>
+    <url>/2025/05/31/java-generics-reflection-notes/</url>
+    <content><![CDATA[一句话总结Java 泛型是编译期特性：编译后类型参数被擦除到边界，运行时 List&lt;String&gt; 和 List&lt;Integer&gt; 是同一个类；但声明在类&#x2F;字段&#x2F;方法签名上的泛型信息会写进 Signature 属性，可以用反射读回来。
+
+
+一、擦除规则与桥方法// 源码class Box&lt;T extends Number &amp; Comparable&lt;T&gt;&gt; &#123;    private T value;    public T get() &#123; return value; &#125;&#125;// 擦除后（概念上）class Box &#123;    private Number value;    public Number get() &#123; return value; &#125;&#125;
+
+规则：无界 T 擦成 Object；有界擦成第一个边界（多个边界时后面的靠插入强转实现）；编译器在必要处自动加强转，并生成桥方法保持多态不被破坏。
+interface Box&lt;T&gt; &#123; void set(T v); &#125;class StringBox implements Box&lt;String&gt; &#123;    @Override public void set(String v) &#123; /* ... */ &#125;    // 编译器额外生成（字节码里真实存在）：    // public void set(Object v) &#123; set((String) v); &#125;&#125;
+
+如果没这个桥方法，通过 Box 接口调用 set 会找不到实现——这就是擦除与多态冲突的修补方式，也是反射时看到”两个 set 方法”的原因（用 isBridge() 过滤）。
+擦除带来的限制（面试高频）：
+
+
+
+写法
+是否合法
+原因
+
+
+
+new T()
+否
+运行时没有 T 的具体类型
+
+
+new T[10]
+否
+数组需要确切组件类型
+
+
+if (obj instanceof List&lt;String&gt;)
+否
+运行时无法区分参数化类型
+
+
+List&lt;int&gt;
+否
+类型参数必须是引用类型，用 List&lt;Integer&gt;
+
+
+重载 f(List&lt;String&gt;) &#x2F; f(List&lt;Integer&gt;)
+否
+擦除后签名相同
+
+
+List&lt;String&gt; ls = new ArrayList&lt;Object&gt;()
+否
+泛型不协变，要用通配符
+
+
+二、PECS 与通配符Producer Extends, Consumer Super：只往外读用 ? extends，只往里写用 ? super，两者都做就别用通配符。
+// 读取：接受 List&lt;Integer&gt;、List&lt;Double&gt; 等任意 Number 子类的列表public static double sum(List&lt;? extends Number&gt; list) &#123;    double total = 0;    for (Number n : list) total += n.doubleValue();    return total;    // list.add(1);  // 编译错误：不知道实际是 List&lt;Double&gt; 还是别的&#125;// 写入：可以安全地放 Integer 及其子类public static void fill(List&lt;? super Integer&gt; list) &#123;    list.add(1);    Object o = list.get(0);   // 读出来只能是 Object&#125;
+
+List&lt;?&gt; 和 List&lt;Object&gt; 不一样：前者是”某种未知类型”，只能读成 Object、不能 add（除 null）；后者明确是 Object，什么都能放。
+三、反射能拿回泛型信息吗能，但只有声明处的签名（类、字段、方法返回值&#x2F;参数上的泛型），拿不到 new ArrayList&lt;String&gt;() 这个局部变量的实际参数类型——因为它没被写进 class 文件。
+Method m = Mapper.class.getMethod(&quot;findUsers&quot;);Type rt = m.getGenericReturnType();          // 注意不是 getReturnType()if (rt instanceof ParameterizedType pt) &#123;    Type arg = pt.getActualTypeArguments()[0];  // User    System.out.println(arg.getTypeName());&#125;// 泛型类型令牌：Gson / MyBatis 常用这个套路绕过擦除new TypeToken&lt;List&lt;User&gt;&gt;() &#123;&#125;.getType();
+
+原理：匿名内部类把 List&lt;User&gt; 写进了自己的父类签名，getGenericSuperclass() 因此能读到。这也是 TypeReference、TypeToken 必须写成匿名子类的原因。
+反射实战要点：
+Class&lt;?&gt; c = Class.forName(&quot;com.example.Order&quot;);  // 会触发类初始化Field f = c.getDeclaredField(&quot;id&quot;);f.setAccessible(true);                            // 访问私有成员Object v = f.get(instance);
+
+
+getDeclaredXxx 只取本类声明的（含 private），getXxx 取所有 public（含继承）；
+反射调用有访问检查和方法查找开销，热路径上应缓存 Method/Field，或改用 MethodHandle &#x2F; 编译期生成代码；
+JDK 9 模块化之后，反射访问非公开成员可能抛 InaccessibleObjectException，需要模块 opens 或启动参数 --add-opens。
+
+四、注解与自定义运行时注解四个元注解：@Retention（生命周期）、@Target（能标在哪）、@Documented、@Inherited；JDK 8 又加了 @Repeatable。
+
+
+
+RetentionPolicy
+保留到
+典型用途
+
+
+
+SOURCE
+源码
+@Override、@SuppressWarnings、Lombok
+
+
+CLASS
+class 文件（默认）
+字节码增强、编译期工具
+
+
+RUNTIME
+运行时，可反射读取
+Spring、MyBatis、自定义切面
+
+
+@Retention(RetentionPolicy.RUNTIME)@Target(ElementType.METHOD)public @interface Idempotent &#123;    String key() default &quot;&quot;;      // 注解元素只能是基本类型/String/Class/枚举/注解/数组    int expireSeconds() default 60;&#125;
+
+在 Spring 项目里落地（拦截器或 AOP 二选一）：
+@Aspect@Componentpublic class IdempotentAspect &#123;    @Around(&quot;@annotation(idem)&quot;)    public Object around(ProceedingJoinPoint pjp, Idempotent idem) throws Throwable &#123;        String key = buildKey(pjp, idem.key());        Boolean ok = redisTemplate.opsForValue()                .setIfAbsent(key, &quot;1&quot;, idem.expireSeconds(), TimeUnit.SECONDS);        if (!Boolean.TRUE.equals(ok)) throw new BizException(&quot;请勿重复提交&quot;);        try &#123;            return pjp.proceed();        &#125; finally &#123;            // 业务失败时释放，允许重试；是否删除取决于业务语义        &#125;    &#125;&#125;
+
+注解本身只是元数据，不会有任何行为；行为来自读它的框架。这一点面试时常被问倒。
+五、面试怎么答
+泛型擦除是什么？ → 编译期把类型参数替换成边界并插入强转，运行时不保留参数化类型，目的是兼容 JDK 5 之前的字节码。
+为什么 List&lt;String&gt; 不能赋给 List&lt;Object&gt;？ → 泛型不协变；否则可以通过 List&lt;Object&gt; 往里塞 Integer 破坏类型安全。数组是协变的，但会在运行时用 ArrayStoreException 兜底，两者设计不同。
+反射能不能拿到泛型？ → 声明签名可以（getGenericReturnType &#x2F; getGenericSuperclass），局部变量不行。
+注解为什么能被 Spring 识别？ → @Retention(RUNTIME) 让注解在运行时可见，框架通过反射&#x2F;AOP 读取并执行逻辑。
+
+六、踩坑清单
+Arrays.asList(arr) 返回的是固定长度的内部 ArrayList，add/remove 会抛 UnsupportedOperationException；List.of(...) 完全不可变；
+Collections.emptyList() 也是不可变的，别往里 add；
+基本类型数组传给 Arrays.asList 会得到 List&lt;int[]&gt; 而不是 List&lt;Integer&gt;；
+反射 setAccessible(true) 在 JDK 17 下反射 JDK 内部类会失败，先考虑有没有公开 API；
+自定义注解别忘 @Retention(RUNTIME)，否则运行时读不到，切面完全不生效；
+Optional、List&lt;T&gt; 这类泛型别当方法参数传 null，返回空集合&#x2F;空 Optional 比 null 好处理。
+
+]]></content>
+      <categories>
+        <category>Java基础</category>
+      </categories>
+      <tags>
+        <tag>Java</tag>
+        <tag>泛型</tag>
+        <tag>反射</tag>
+        <tag>注解</tag>
       </tags>
   </entry>
   <entry>
@@ -846,95 +846,6 @@ Optional 不要用在 DTO&#x2F;JSON 序列化上，Jackson 需要额外模块才
       </tags>
   </entry>
   <entry>
-    <title>ThreadLocal 原理、内存泄漏与异步场景下的上下文传递</title>
-    <url>/2025/08/16/java-threadlocal-notes/</url>
-    <content><![CDATA[一句话总结ThreadLocal 不是”给变量加线程安全”，而是每个线程持有自己的一份副本。它的存储挂在 Thread 对象上的 ThreadLocalMap 里；key 是弱引用，value 是强引用，线程池场景下不 remove() 就会内存泄漏并串数据。
-
-
-一、它到底存在哪// JDK 源码结构（简化）class Thread &#123;    ThreadLocal.ThreadLocalMap threadLocals = null;      // 普通 ThreadLocal 的数据    ThreadLocal.ThreadLocalMap inheritableThreadLocals = null;&#125;static class ThreadLocalMap &#123;    static class Entry extends WeakReference&lt;ThreadLocal&lt;?&gt;&gt; &#123;        Object value;        // 强引用        Entry(ThreadLocal&lt;?&gt; k, Object v) &#123; super(k); value = v; &#125;    &#125;&#125;
-
-关键：数据不在 ThreadLocal 对象里，而在线程自己的 Map 里，以 ThreadLocal 实例为 key。所以：
-
-一个 ThreadLocal 变量在不同线程里对应不同 value；
-线程结束，Map 随之可回收；
-线程不结束（线程池复用），value 会一直留在这个线程上。
-
-private static final ThreadLocal&lt;UserContext&gt; CTX = new ThreadLocal&lt;&gt;();public void handle(Request req) &#123;    try &#123;        CTX.set(parseUser(req));    // 绑定当前线程        doBiz();                    // 后续任意层级都能 CTX.get()    &#125; finally &#123;        CTX.remove();               // 必须！    &#125;&#125;
-
-二、为什么弱引用还会内存泄漏Thread(强) → ThreadLocalMap → Entry → value(强)                                ↘ key(弱引用) → ThreadLocal 实例
-
-如果 ThreadLocal 实例失去了外部强引用（比如局部 new 出来用完了），GC 会回收它，Entry 的 key 变成 null，但 value 仍被 Entry 强引用着，而 Entry 又被长期存活的线程池线程引用。于是 value 永远取不到、也回收不掉——这就是所谓的泄漏。
-ThreadLocalMap 在 get/set/remove 时会顺路清理 key 为 null 的陈旧 Entry（expungeStaleEntry），但这是被动触发：如果之后这个线程再不碰 ThreadLocal，清理就不会发生。
-所以正确姿势只有一条：用完 remove()，放在 finally 里。
-
-面试常问”key 为什么设计成弱引用”：这是为了在 ThreadLocal 本身已无用时至少让 key 能被回收、给 Map 一个发现”这个 entry 已废弃”的机会；它并不能自动回收 value，所以仍要手动 remove。
-
-三、典型用途
-
-
-场景
-怎么用
-
-
-
-登录用户上下文
-拦截器 set，finally remove，Service 层随处 get
-
-
-链路追踪 traceId
-日志 MDC 底层就是 ThreadLocal
-
-
-事务 &#x2F; 连接绑定
-Spring TransactionSynchronizationManager 把 Connection 绑到线程
-
-
-分页参数透传
-PageHelper 用 ThreadLocal 存 page 信息
-
-
-非线程安全对象复用
-SimpleDateFormat 每线程一份
-
-
-private static final ThreadLocal&lt;SimpleDateFormat&gt; FMT =        ThreadLocal.withInitial(() -&gt; new SimpleDateFormat(&quot;yyyy-MM-dd&quot;));// withInitial 只是第一次 get() 时懒初始化，不等于自动清理
-
-Spring 的 RequestContextHolder、SecurityContextHolder 也都基于它，所以异步线程里拿不到登录用户是同一个原因，不是框架 bug。
-四、父子线程与线程池InheritableThreadLocal 在创建子线程时把父线程的 Map 复制一份，能实现一次性传递。但线程池里线程是复用的：
-
-线程早就创建好了，不会再走”创建时复制”；
-上一个任务遗留的 value 可能被下一个任务读到，造成数据串味（用户 A 的上下文被用户 B 的请求看到）。
-
-解决思路：
-// 异步前显式捕获，异步内显式恢复，并清理UserContext ctx = CTX.get();executor.submit(() -&gt; &#123;    try &#123;        CTX.set(ctx);        doAsyncBiz();    &#125; finally &#123;        CTX.remove();    &#125;&#125;);
-
-生产项目更常用阿里的 TransmittableThreadLocal（TTL），包装线程池后由框架负责捕获&#x2F;回放&#x2F;恢复。CompletableFuture、 @Async、MQ 消费者线程都要按这个思路处理。
-五、面试怎么答
-ThreadLocal 原理？ → 每个 Thread 持有 ThreadLocalMap，以 ThreadLocal 弱引用为 key 存 value；get&#x2F;set 操作的是当前线程的 Map，因此天然线程隔离。
-为什么会内存泄漏？ → 线程池线程长期存活，key 被 GC 后 value 仍被强引用且无法访问；被动清理不保证及时，必须 remove。
-ThreadLocal 和 synchronized 区别？ → 前者用”各存一份”避免共享，空间换时间；后者用”同一时刻只让一个线程访问”串行化，时间换空间。
-异步怎么传上下文？ → InheritableThreadLocal 在线程池下失效，需显式传递 + 清理，或用 TTL。
-
-六、踩坑清单
-remove() 一定放 finally，业务抛异常也不能漏；
-别把大对象、集合、Connection 长期挂在 ThreadLocal 上；
-static final 声明 ThreadLocal 实例，避免每次 new 导致 key 不同；
-拦截器&#x2F;Filter 里 set 了，就必须有对应的清理点，别只依赖框架；
-用 ThreadLocal.withInitial 时别以为它会替你回收；
-子线程、@Async、定时任务、MQ 消费者里默认没有 Web 请求的上下文，取不到值先查这条链路，别急着加全局静态变量。
-
-]]></content>
-      <categories>
-        <category>Java基础</category>
-      </categories>
-      <tags>
-        <tag>Java</tag>
-        <tag>并发</tag>
-        <tag>面试</tag>
-        <tag>ThreadLocal</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>String、字符串常量池与 StringBuilder：一篇讲透</title>
     <url>/2025/02/18/java-string-pool-notes/</url>
     <content><![CDATA[一句话总结String 是不可变的 final 类；字面量进字符串常量池复用，new String(...) 一定在堆上新建对象；JDK 9 之后底层从 char[] 换成 byte[] + coder；循环拼接必须用 StringBuilder。
@@ -1054,6 +965,95 @@ substring 在 JDK 6 会共享原 char[] 导致大字符串无法回收，JDK 7+ 
         <tag>Java</tag>
         <tag>面试</tag>
         <tag>String</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>ThreadLocal 原理、内存泄漏与异步场景下的上下文传递</title>
+    <url>/2025/08/16/java-threadlocal-notes/</url>
+    <content><![CDATA[一句话总结ThreadLocal 不是”给变量加线程安全”，而是每个线程持有自己的一份副本。它的存储挂在 Thread 对象上的 ThreadLocalMap 里；key 是弱引用，value 是强引用，线程池场景下不 remove() 就会内存泄漏并串数据。
+
+
+一、它到底存在哪// JDK 源码结构（简化）class Thread &#123;    ThreadLocal.ThreadLocalMap threadLocals = null;      // 普通 ThreadLocal 的数据    ThreadLocal.ThreadLocalMap inheritableThreadLocals = null;&#125;static class ThreadLocalMap &#123;    static class Entry extends WeakReference&lt;ThreadLocal&lt;?&gt;&gt; &#123;        Object value;        // 强引用        Entry(ThreadLocal&lt;?&gt; k, Object v) &#123; super(k); value = v; &#125;    &#125;&#125;
+
+关键：数据不在 ThreadLocal 对象里，而在线程自己的 Map 里，以 ThreadLocal 实例为 key。所以：
+
+一个 ThreadLocal 变量在不同线程里对应不同 value；
+线程结束，Map 随之可回收；
+线程不结束（线程池复用），value 会一直留在这个线程上。
+
+private static final ThreadLocal&lt;UserContext&gt; CTX = new ThreadLocal&lt;&gt;();public void handle(Request req) &#123;    try &#123;        CTX.set(parseUser(req));    // 绑定当前线程        doBiz();                    // 后续任意层级都能 CTX.get()    &#125; finally &#123;        CTX.remove();               // 必须！    &#125;&#125;
+
+二、为什么弱引用还会内存泄漏Thread(强) → ThreadLocalMap → Entry → value(强)                                ↘ key(弱引用) → ThreadLocal 实例
+
+如果 ThreadLocal 实例失去了外部强引用（比如局部 new 出来用完了），GC 会回收它，Entry 的 key 变成 null，但 value 仍被 Entry 强引用着，而 Entry 又被长期存活的线程池线程引用。于是 value 永远取不到、也回收不掉——这就是所谓的泄漏。
+ThreadLocalMap 在 get/set/remove 时会顺路清理 key 为 null 的陈旧 Entry（expungeStaleEntry），但这是被动触发：如果之后这个线程再不碰 ThreadLocal，清理就不会发生。
+所以正确姿势只有一条：用完 remove()，放在 finally 里。
+
+面试常问”key 为什么设计成弱引用”：这是为了在 ThreadLocal 本身已无用时至少让 key 能被回收、给 Map 一个发现”这个 entry 已废弃”的机会；它并不能自动回收 value，所以仍要手动 remove。
+
+三、典型用途
+
+
+场景
+怎么用
+
+
+
+登录用户上下文
+拦截器 set，finally remove，Service 层随处 get
+
+
+链路追踪 traceId
+日志 MDC 底层就是 ThreadLocal
+
+
+事务 &#x2F; 连接绑定
+Spring TransactionSynchronizationManager 把 Connection 绑到线程
+
+
+分页参数透传
+PageHelper 用 ThreadLocal 存 page 信息
+
+
+非线程安全对象复用
+SimpleDateFormat 每线程一份
+
+
+private static final ThreadLocal&lt;SimpleDateFormat&gt; FMT =        ThreadLocal.withInitial(() -&gt; new SimpleDateFormat(&quot;yyyy-MM-dd&quot;));// withInitial 只是第一次 get() 时懒初始化，不等于自动清理
+
+Spring 的 RequestContextHolder、SecurityContextHolder 也都基于它，所以异步线程里拿不到登录用户是同一个原因，不是框架 bug。
+四、父子线程与线程池InheritableThreadLocal 在创建子线程时把父线程的 Map 复制一份，能实现一次性传递。但线程池里线程是复用的：
+
+线程早就创建好了，不会再走”创建时复制”；
+上一个任务遗留的 value 可能被下一个任务读到，造成数据串味（用户 A 的上下文被用户 B 的请求看到）。
+
+解决思路：
+// 异步前显式捕获，异步内显式恢复，并清理UserContext ctx = CTX.get();executor.submit(() -&gt; &#123;    try &#123;        CTX.set(ctx);        doAsyncBiz();    &#125; finally &#123;        CTX.remove();    &#125;&#125;);
+
+生产项目更常用阿里的 TransmittableThreadLocal（TTL），包装线程池后由框架负责捕获&#x2F;回放&#x2F;恢复。CompletableFuture、 @Async、MQ 消费者线程都要按这个思路处理。
+五、面试怎么答
+ThreadLocal 原理？ → 每个 Thread 持有 ThreadLocalMap，以 ThreadLocal 弱引用为 key 存 value；get&#x2F;set 操作的是当前线程的 Map，因此天然线程隔离。
+为什么会内存泄漏？ → 线程池线程长期存活，key 被 GC 后 value 仍被强引用且无法访问；被动清理不保证及时，必须 remove。
+ThreadLocal 和 synchronized 区别？ → 前者用”各存一份”避免共享，空间换时间；后者用”同一时刻只让一个线程访问”串行化，时间换空间。
+异步怎么传上下文？ → InheritableThreadLocal 在线程池下失效，需显式传递 + 清理，或用 TTL。
+
+六、踩坑清单
+remove() 一定放 finally，业务抛异常也不能漏；
+别把大对象、集合、Connection 长期挂在 ThreadLocal 上；
+static final 声明 ThreadLocal 实例，避免每次 new 导致 key 不同；
+拦截器&#x2F;Filter 里 set 了，就必须有对应的清理点，别只依赖框架；
+用 ThreadLocal.withInitial 时别以为它会替你回收；
+子线程、@Async、定时任务、MQ 消费者里默认没有 Web 请求的上下文，取不到值先查这条链路，别急着加全局静态变量。
+
+]]></content>
+      <categories>
+        <category>Java基础</category>
+      </categories>
+      <tags>
+        <tag>Java</tag>
+        <tag>并发</tag>
+        <tag>面试</tag>
+        <tag>ThreadLocal</tag>
       </tags>
   </entry>
   <entry>
@@ -1217,6 +1217,63 @@ ZGC
       </tags>
   </entry>
   <entry>
+    <title>消息队列：可靠投递、幂等与顺序</title>
+    <url>/2026/07/18/mq-reliability-notes/</url>
+    <content><![CDATA[为什么用 MQ解耦、异步、削峰。三个词背下来，然后各举一个业务例子。
+
+
+消息可能在哪丢
+
+
+环节
+保证手段
+
+
+
+生产者 → Broker
+同步发送 + 重试；或本地消息表 + 定时补偿
+
+
+Broker 存储
+刷盘策略（同步刷盘 &#x2F; 异步刷盘）、主从复制
+
+
+Broker → 消费者
+手动 ACK（业务成功后再 ack），失败重投
+
+
+消费者幂等（必问）MQ 保证”至少一次”，所以一定会重复，消费端必须幂等：
+
+唯一索引：业务表加唯一键，重复插入直接报错忽略；
+去重表 &#x2F; Redis 标记：SETNX msgId 成功才处理；
+状态机：只允许 待支付 → 已支付，重复消息状态已变则跳过；
+乐观锁：UPDATE ... SET version = version + 1 WHERE version = ?
+
+顺序消息
+全局顺序：单队列单消费者（吞吐低，很少用）；
+局部顺序：按业务 key（如订单号）hash 到同一队列，消费端串行处理该队列。
+
+消息积压怎么办
+先查是不是消费者挂了&#x2F;处理变慢；
+临时扩容消费者（注意：队列数要 ≥ 消费者数，否则加消费者无效）；
+紧急情况下把消息转存到临时队列，异步慢慢补。
+
+面试常问
+为什么不用数据库轮询代替 MQ？（延迟高、DB 压力大、难扩展）
+事务消息是什么？（RocketMQ 半消息 + 回查，保证”本地事务 + 发消息”原子）
+
+]]></content>
+      <categories>
+        <category>框架与中间件</category>
+      </categories>
+      <tags>
+        <tag>面试</tag>
+        <tag>MQ</tag>
+        <tag>RocketMQ</tag>
+        <tag>中间件</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>JVM 类加载机制与双亲委派：从 class 文件到可使用的类</title>
     <url>/2025/09/20/jvm-classloader-notes/</url>
     <content><![CDATA[一句话总结类从 class 文件到能用要经历加载 → 验证 → 准备 → 解析 → 初始化；双亲委派让类先交给父加载器，保证 java.lang.* 不被用户代码替换；而 SPI、Web 容器、热部署这三类场景必须打破它。
@@ -1358,60 +1415,41 @@ static final 常量被编译期内联，改了常量值却只重发一个 jar，
       </tags>
   </entry>
   <entry>
-    <title>消息队列：可靠投递、幂等与顺序</title>
-    <url>/2026/07/18/mq-reliability-notes/</url>
-    <content><![CDATA[为什么用 MQ解耦、异步、削峰。三个词背下来，然后各举一个业务例子。
+    <title>Nacos：注册中心与配置中心的实战用法</title>
+    <url>/2026/09/05/nacos-registry-config-notes/</url>
+    <content><![CDATA[两个角色Nacos 同时是注册中心（服务发现）和配置中心（集中管理配置）。
 
 
-消息可能在哪丢
+注册与发现spring:  application:    name: travel-note            # 服务名，Feign 就靠它找  cloud:    nacos:      discovery:        server-addr: 127.0.0.1:8848
 
+调用方只需写服务名：
+@FeignClient(name = &quot;travel-note&quot;)   // 由 Nacos 解析成真实 IP:Port
 
-环节
-保证手段
+好处：实例扩缩容、换端口、换机器都不用改代码。
+配置中心spring:  cloud:    nacos:      config:        server-addr: 127.0.0.1:8848        file-extension: yml        group: DEFAULT_GROUP        namespace: dev
 
+配置的 dataId 规则：$&#123;spring.application.name&#125;-$&#123;profile&#125;.$&#123;file-extension&#125;，例如 travel-note-dev.yml。
+动态刷新@RefreshScope      // 配置变了，这个 Bean 会重新创建@RestControllerpublic class ConfigController &#123;    @Value(&quot;$&#123;app.title&#125;&quot;) String title;&#125;
 
-
-生产者 → Broker
-同步发送 + 重试；或本地消息表 + 定时补偿
-
-
-Broker 存储
-刷盘策略（同步刷盘 &#x2F; 异步刷盘）、主从复制
-
-
-Broker → 消费者
-手动 ACK（业务成功后再 ack），失败重投
-
-
-消费者幂等（必问）MQ 保证”至少一次”，所以一定会重复，消费端必须幂等：
-
-唯一索引：业务表加唯一键，重复插入直接报错忽略；
-去重表 &#x2F; Redis 标记：SETNX msgId 成功才处理；
-状态机：只允许 待支付 → 已支付，重复消息状态已变则跳过；
-乐观锁：UPDATE ... SET version = version + 1 WHERE version = ?
-
-顺序消息
-全局顺序：单队列单消费者（吞吐低，很少用）；
-局部顺序：按业务 key（如订单号）hash 到同一队列，消费端串行处理该队列。
-
-消息积压怎么办
-先查是不是消费者挂了&#x2F;处理变慢；
-临时扩容消费者（注意：队列数要 ≥ 消费者数，否则加消费者无效）；
-紧急情况下把消息转存到临时队列，异步慢慢补。
+注意：@RefreshScope 是通过销毁重建 Bean 实现的，所以别用在有状态的 Bean 上。
+踩坑清单
+命名空间&#x2F;分组不一致：服务注册在 dev，配置读的是 public → 配置读不到，且不报错；
+服务没注册上：spring.cloud.nacos.discovery.enabled 或网络端口不通；
+本地缓存：Nacos 客户端会缓存到 ~/nacos/config，改了配置不生效可以先清缓存；
+集群要配 MySQL：单机模式默认嵌入式 Derby，生产必须外置 MySQL。
 
 面试常问
-为什么不用数据库轮询代替 MQ？（延迟高、DB 压力大、难扩展）
-事务消息是什么？（RocketMQ 半消息 + 回查，保证”本地事务 + 发消息”原子）
+Nacos 和 Eureka 区别？Nacos 支持 AP&#x2F;CP 切换、自带配置中心、健康检查更快；
+服务挂了多久能感知？临时实例靠心跳（默认 15s 没心跳标记不健康，30s 摘除）。
 
 ]]></content>
       <categories>
-        <category>框架与中间件</category>
+        <category>动手实践</category>
       </categories>
       <tags>
-        <tag>面试</tag>
-        <tag>MQ</tag>
-        <tag>RocketMQ</tag>
-        <tag>中间件</tag>
+        <tag>Spring Cloud</tag>
+        <tag>微服务</tag>
+        <tag>Nacos</tag>
       </tags>
   </entry>
   <entry>
@@ -1524,44 +1562,6 @@ NULL 能走索引吗？可以，但 IS NULL 选择性差，通常意义不大。
       </tags>
   </entry>
   <entry>
-    <title>Nacos：注册中心与配置中心的实战用法</title>
-    <url>/2026/09/05/nacos-registry-config-notes/</url>
-    <content><![CDATA[两个角色Nacos 同时是注册中心（服务发现）和配置中心（集中管理配置）。
-
-
-注册与发现spring:  application:    name: travel-note            # 服务名，Feign 就靠它找  cloud:    nacos:      discovery:        server-addr: 127.0.0.1:8848
-
-调用方只需写服务名：
-@FeignClient(name = &quot;travel-note&quot;)   // 由 Nacos 解析成真实 IP:Port
-
-好处：实例扩缩容、换端口、换机器都不用改代码。
-配置中心spring:  cloud:    nacos:      config:        server-addr: 127.0.0.1:8848        file-extension: yml        group: DEFAULT_GROUP        namespace: dev
-
-配置的 dataId 规则：$&#123;spring.application.name&#125;-$&#123;profile&#125;.$&#123;file-extension&#125;，例如 travel-note-dev.yml。
-动态刷新@RefreshScope      // 配置变了，这个 Bean 会重新创建@RestControllerpublic class ConfigController &#123;    @Value(&quot;$&#123;app.title&#125;&quot;) String title;&#125;
-
-注意：@RefreshScope 是通过销毁重建 Bean 实现的，所以别用在有状态的 Bean 上。
-踩坑清单
-命名空间&#x2F;分组不一致：服务注册在 dev，配置读的是 public → 配置读不到，且不报错；
-服务没注册上：spring.cloud.nacos.discovery.enabled 或网络端口不通；
-本地缓存：Nacos 客户端会缓存到 ~/nacos/config，改了配置不生效可以先清缓存；
-集群要配 MySQL：单机模式默认嵌入式 Derby，生产必须外置 MySQL。
-
-面试常问
-Nacos 和 Eureka 区别？Nacos 支持 AP&#x2F;CP 切换、自带配置中心、健康检查更快；
-服务挂了多久能感知？临时实例靠心跳（默认 15s 没心跳标记不健康，30s 摘除）。
-
-]]></content>
-      <categories>
-        <category>项目实战</category>
-      </categories>
-      <tags>
-        <tag>微服务</tag>
-        <tag>Spring Cloud</tag>
-        <tag>Nacos</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>Redis 缓存三问 + 分布式锁：穿透/击穿/雪崩</title>
     <url>/2026/05/23/redis-cache-problems-notes/</url>
     <content><![CDATA[三个”经典问题”一句话区分
@@ -1633,9 +1633,41 @@ Redis 单线程为什么快？纯内存 + IO 多路复用 + 单线程无锁竞�
       </tags>
   </entry>
   <entry>
-    <title>项目实战：游记模块的接口设计与缓存实践</title>
+    <title>Spring Cloud Alibaba：OpenFeign + Nacos 实战笔记</title>
+    <url>/2026/06/20/spring-cloud-openfeign-notes/</url>
+    <content><![CDATA[微服务之间互相调用，最省事的做法是把 Feign 契约单独抽到 api 模块，provider 实现、consumer 声明式调用。
+
+
+目录结构约定travel-api-user          # 契约：Feign 接口 + 实体travel-modules-user      # 提供者：实现 Feign 接口 + 业务travel-modules-order     # 消费者：注入 RemoteUserService
+
+契约（api 模块）@FeignClient(name = ServiceNameConstants.USER_SERVICE,             contextId = &quot;remoteUserService&quot;,             fallbackFactory = RemoteUserFallbackFactory.class)public interface RemoteUserService &#123;    @GetMapping(&quot;/user/feign/&#123;id&#125;&quot;)    R&lt;UserInfo&gt; getOne(@PathVariable(&quot;id&quot;) Long id,                       @RequestHeader(SecurityConstants.FROM_SOURCE) String source);&#125;
+
+提供者（模块内）@InnerAuth   // 只允许内部调用，会校验 from-source 请求头@GetMapping(&quot;/feign/&#123;id&#125;&quot;)public R&lt;UserInfo&gt; feignGet(@PathVariable Long id) &#123;    return R.ok(userInfoService.getById(id));&#125;
+
+注意：@InnerAuth 依赖网关&#x2F;调用方注入的 from-source: inner 头，外部直接访问会被拦截。
+三个容易踩的坑
+降级返回的是 R.fail() 而不是 null —— 消费方必须判 R.isError()，否则 NPE；
+方法名不用和提供者一致，Feign 只认 HTTP 方法 + 路径 + 参数位置；
+超时：默认 1 秒，跨服务查库&#x2F;掉 Redis 很容易超，要在配置里调：
+
+feign:  client:    config:      default:        connectTimeout: 5000        readTimeout: 10000
+
+为什么服务名而不是 IP服务名由 Nacos 注册中心解析，实例扩缩容、换端口都不用改代码。
+]]></content>
+      <categories>
+        <category>框架与中间件</category>
+      </categories>
+      <tags>
+        <tag>Spring Cloud</tag>
+        <tag>微服务</tag>
+        <tag>Nacos</tag>
+        <tag>OpenFeign</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>接口设计与缓存实践：分页、幂等与 N+1</title>
     <url>/2026/08/08/note-module-design-notes/</url>
-    <content><![CDATA[记录一个”游记模块”从表结构到接口的完整设计过程，重点在分页排序、收藏幂等、评论关联这三块。
+    <content><![CDATA[记录一个内容模块从表结构到接口的完整设计过程，重点在分页排序、收藏幂等、评论关联这三块。
 
 
 表结构拆分
@@ -1647,7 +1679,7 @@ Redis 单线程为什么快？纯内存 + IO 多路复用 + 单线程无锁竞�
 
 
 ta_note
-游记主表（标题、封面、作者、统计数、状态）
+内容主表（标题、封面、作者、统计数、状态）
 
 
 ta_note_content
@@ -1679,44 +1711,12 @@ Boolean favor(Long id, boolean on) &#123;    String key = &quot;user_note_collec
 
 ]]></content>
       <categories>
-        <category>项目实战</category>
+        <category>动手实践</category>
       </categories>
       <tags>
         <tag>微服务</tag>
         <tag>Redis</tag>
         <tag>MyBatis-Plus</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>Spring Cloud Alibaba：OpenFeign + Nacos 实战笔记</title>
-    <url>/2026/06/20/spring-cloud-openfeign-notes/</url>
-    <content><![CDATA[微服务之间互相调用，最省事的做法是把 Feign 契约单独抽到 api 模块，provider 实现、consumer 声明式调用。
-
-
-目录结构约定travel-api-user          # 契约：Feign 接口 + 实体travel-modules-user      # 提供者：实现 Feign 接口 + 业务travel-modules-order     # 消费者：注入 RemoteUserService
-
-契约（api 模块）@FeignClient(name = ServiceNameConstants.USER_SERVICE,             contextId = &quot;remoteUserService&quot;,             fallbackFactory = RemoteUserFallbackFactory.class)public interface RemoteUserService &#123;    @GetMapping(&quot;/user/feign/&#123;id&#125;&quot;)    R&lt;UserInfo&gt; getOne(@PathVariable(&quot;id&quot;) Long id,                       @RequestHeader(SecurityConstants.FROM_SOURCE) String source);&#125;
-
-提供者（模块内）@InnerAuth   // 只允许内部调用，会校验 from-source 请求头@GetMapping(&quot;/feign/&#123;id&#125;&quot;)public R&lt;UserInfo&gt; feignGet(@PathVariable Long id) &#123;    return R.ok(userInfoService.getById(id));&#125;
-
-注意：@InnerAuth 依赖网关&#x2F;调用方注入的 from-source: inner 头，外部直接访问会被拦截。
-三个容易踩的坑
-降级返回的是 R.fail() 而不是 null —— 消费方必须判 R.isError()，否则 NPE；
-方法名不用和提供者一致，Feign 只认 HTTP 方法 + 路径 + 参数位置；
-超时：默认 1 秒，跨服务查库&#x2F;掉 Redis 很容易超，要在配置里调：
-
-feign:  client:    config:      default:        connectTimeout: 5000        readTimeout: 10000
-
-为什么服务名而不是 IP服务名由 Nacos 注册中心解析，实例扩缩容、换端口都不用改代码。
-]]></content>
-      <categories>
-        <category>框架与中间件</category>
-      </categories>
-      <tags>
-        <tag>微服务</tag>
-        <tag>Spring Cloud</tag>
-        <tag>Nacos</tag>
-        <tag>OpenFeign</tag>
       </tags>
   </entry>
   <entry>
@@ -1784,8 +1784,8 @@ private 方法加注解无效（代理不了）；
         <category>框架与中间件</category>
       </categories>
       <tags>
-        <tag>Spring</tag>
         <tag>面试</tag>
+        <tag>Spring</tag>
         <tag>IOC</tag>
         <tag>AOP</tag>
       </tags>
@@ -1827,8 +1827,8 @@ private 方法加注解无效（代理不了）；
         <category>框架与中间件</category>
       </categories>
       <tags>
-        <tag>Spring</tag>
         <tag>面试</tag>
+        <tag>Spring</tag>
         <tag>事务</tag>
       </tags>
   </entry>
@@ -1947,8 +1947,8 @@ starter 里不要塞 application.yml、不要带版本冲突的 Spring 依赖，
         <category>框架与中间件</category>
       </categories>
       <tags>
-        <tag>Spring</tag>
         <tag>面试</tag>
+        <tag>Spring</tag>
         <tag>Spring Boot</tag>
         <tag>自动配置</tag>
       </tags>

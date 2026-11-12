@@ -50,7 +50,7 @@
       { cls: 't1', icon: 'J', title: 'Java 基础', desc: '字符串 · 集合 · 异常 · Stream', url: '/categories/Java基础/', n: bc['Java基础'] },
       { cls: 't2', icon: '⚙', title: '并发与 JVM', desc: '线程池 · JMM · GC · 类加载', url: '/tags/并发/', n: bt['并发'] },
       { cls: 't3', icon: 'S', title: '框架与中间件', desc: 'Spring · MySQL · Redis · MQ', url: '/categories/框架与中间件/', n: bc['框架与中间件'] },
-      { cls: 't4', icon: 'P', title: '项目实战', desc: '接口设计 · 网关 · 部署', url: '/categories/项目实战/', n: bc['项目实战'] }
+      { cls: 't4', icon: 'P', title: '动手实践', desc: '接口设计 · 网关 · 部署', url: '/categories/动手实践/', n: bc['动手实践'] }
     ];
     var cards = items.map(function (it) {
       return '<a class="topic-card ' + it.cls + '" href="' + it.url + '">' +

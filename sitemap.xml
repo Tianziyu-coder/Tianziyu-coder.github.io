@@ -2,7 +2,34 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   
   <url>
-    <loc>https://tianziyu-coder.github.io/projects/index.html</loc>
+    <loc>https://tianziyu-coder.github.io/2026/08/08/note-module-design-notes/</loc>
+    
+    <lastmod>2026-11-12</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://tianziyu-coder.github.io/2026/10/05/docker-deploy-notes/</loc>
+    
+    <lastmod>2026-11-12</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://tianziyu-coder.github.io/2026/09/05/nacos-registry-config-notes/</loc>
+    
+    <lastmod>2026-11-12</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://tianziyu-coder.github.io/2026/08/22/gateway-jwt-auth-notes/</loc>
     
     <lastmod>2026-11-12</lastmod>
     
@@ -111,42 +138,6 @@
   
   <url>
     <loc>https://tianziyu-coder.github.io/2026/09/20/java-interview-quick-reference/</loc>
-    
-    <lastmod>2026-10-20</lastmod>
-    
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  
-  <url>
-    <loc>https://tianziyu-coder.github.io/2026/08/22/gateway-jwt-auth-notes/</loc>
-    
-    <lastmod>2026-10-20</lastmod>
-    
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  
-  <url>
-    <loc>https://tianziyu-coder.github.io/2026/10/05/docker-deploy-notes/</loc>
-    
-    <lastmod>2026-10-20</lastmod>
-    
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  
-  <url>
-    <loc>https://tianziyu-coder.github.io/2026/09/05/nacos-registry-config-notes/</loc>
-    
-    <lastmod>2026-10-20</lastmod>
-    
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  
-  <url>
-    <loc>https://tianziyu-coder.github.io/2026/08/08/note-module-design-notes/</loc>
     
     <lastmod>2026-10-20</lastmod>
     
