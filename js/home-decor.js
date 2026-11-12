@@ -20,7 +20,6 @@
   function makeHero() {
     var s = window.__SITE_STATS__ || {};
     var bc = s.byCategory || {};
-    var bt = s.byTag || {};
     var el = document.createElement('section');
     el.id = HERO_ID;
     el.className = 'my-hero';
@@ -75,10 +74,31 @@
     if (oldTopics) oldTopics.remove();
     if (!isHomeFirstPage()) return;
 
-    var anchor = document.getElementById('category-bar') || document.getElementById('recent-posts');
-    if (!anchor || !anchor.parentNode) return;
-    anchor.parentNode.insertBefore(makeHero(), anchor);
-    anchor.parentNode.insertBefore(makeTopics(), anchor);
+    /* #recent-posts 在宽屏下是 flex-wrap 容器。
+       之前误插到它的子元素 #categoryBar（横向 flex 的分类栏）里，
+       被挤成窄竖条、文字一字一行。这里改为插到第一篇卡片之前，
+       作为 #recent-posts 的直接子元素，配合 CSS 的 100% 宽各占整行。 */
+    var posts = document.getElementById('recent-posts');
+    if (!posts) return;
+
+    var ref = null;
+    var kids = posts.children;
+    for (var i = 0; i < kids.length; i++) {
+      if (kids[i].classList && kids[i].classList.contains('recent-post-item')) {
+        ref = kids[i];
+        break;
+      }
+    }
+
+    var hero = makeHero();
+    var topics = makeTopics();
+    if (ref) {
+      posts.insertBefore(hero, ref);
+      posts.insertBefore(topics, ref);
+    } else {
+      posts.appendChild(hero);
+      posts.appendChild(topics);
+    }
   }
 
   build();
